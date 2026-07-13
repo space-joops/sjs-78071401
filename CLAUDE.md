@@ -1,0 +1,74 @@
+# Space Joops — 9-클로드 병렬 작업 가이드
+
+이 프로젝트는 메인 화면의 9개 버튼에 대응하는 9개 기능을 **서로 다른 9개의 클로드 세션이 동시에** 개발합니다.
+당신이 담당하는 기능 번호를 **N** (1~9)이라고 할 때, 아래 규칙을 반드시 지키세요.
+목표는 단 하나: **어떤 클로드의 diff에도 다른 클로드와 겹치는 파일이 없게 하는 것.**
+
+## 1. 소유 영역 — 여기만 수정/생성하세요
+
+| 경로 | 용도 |
+|---|---|
+| `src/features/feature-N/**` | 기능의 모든 코드: `config.ts`(버튼 정보), 컴포넌트, 훅, 유틸, 테스트 |
+| `src/app/features/N/**` | 기능의 라우트 페이지 (`page.tsx`부터 하위 세그먼트까지 자유) |
+| `src/app/api/feature-N/**` | API 라우트가 필요한 경우에만 |
+| `public/feature-N/**` | 정적 에셋(이미지 등)이 필요한 경우에만 |
+
+- 메인 화면 버튼의 제목·설명·아이콘은 `src/features/feature-N/config.ts`만 수정하면 자동 반영됩니다.
+- 라우트는 `src/app/features/N/page.tsx`를 **새로 만들면** 됩니다. Next.js에서 정적 세그먼트가 동적 세그먼트(`[id]`)보다 우선하므로, 파일을 만드는 것만으로 자리표시 페이지를 대체합니다.
+- 페이지는 얇게 유지하고 실제 로직·컴포넌트는 `src/features/feature-N/`에 두는 것을 권장합니다.
+
+## 2. 수정 금지 — 공유 파일
+
+다음 파일은 **읽기는 자유, 수정은 금지**입니다. 수정이 필요하다고 판단되면 작업을 멈추고 사용자(조율자)에게 요청하세요.
+
+- `src/app/page.tsx` (메인 화면)
+- `src/app/layout.tsx`, `src/app/globals.css`
+- `src/features/index.ts`, `src/features/types.ts`
+- `src/app/features/[id]/page.tsx` (미구현 기능용 공용 자리표시)
+- `package.json`, `package-lock.json`, `tsconfig.json`, `next.config.ts`, `eslint.config.mjs`, `postcss.config.mjs`
+- `CLAUDE.md` (이 파일)
+- 다른 기능의 폴더 (`feature-M`, `features/M`, M ≠ N)
+
+## 3. 의존성(npm 패키지) 규칙
+
+`package.json`은 충돌이 가장 잘 나는 지점입니다.
+
+1. 우선 기존 의존성(React 19, Next 15, Tailwind 4)과 표준 웹 API로 해결을 시도하세요.
+2. 새 패키지가 꼭 필요하면 직접 설치하지 말고, 사용자에게 패키지명과 이유를 보고하고 승인·설치를 요청하세요. (사용자가 main에 일괄 설치 → 각 브랜치가 rebase로 수용)
+
+## 4. Git 워크플로
+
+- **브랜치**: `feature/N-<짧은-영문-슬러그>` (예: `feature/3-todo-list`). main에서 분기합니다.
+- **워크트리**: 같은 머신에서 여러 클로드가 동시에 작업하면 체크아웃이 서로를 덮어씁니다. 반드시 세션마다 별도 워크트리를 쓰세요:
+  ```bash
+  git worktree add ../sjs-feature-N feature/N-<슬러그>
+  ```
+- **커밋 메시지**: `feat(N): <내용>` 형식 (예: `feat(3): 할 일 목록 추가/삭제 구현`).
+- **동기화**: 작업 시작 시와 PR 전에 `git fetch origin && git rebase origin/main`.
+- **PR 전 자가 점검**: `git diff --stat origin/main` 결과에 1번 표의 소유 영역 밖 파일이 하나라도 있으면 되돌리세요. 이것이 이 가이드의 핵심 검증입니다.
+
+## 5. 개발 서버 포트
+
+포트 충돌을 피하기 위해 기능 번호를 포트에 반영하세요.
+
+```bash
+npm run dev -- --port 300N   # 예: 기능 3 → 3003
+```
+
+## 6. 스타일링 규칙
+
+- Tailwind 유틸리티 클래스만 사용하세요. `globals.css` 수정 금지.
+- 전역 CSS가 필요해 보이면 대신 자기 폴더 안 CSS Module(`src/features/feature-N/*.module.css`)을 쓰세요.
+- 다크 모드(`dark:`)를 지원하고, 메인 화면과 같은 톤(rounded-2xl 카드, 검정/흰색 기반 중립 팔레트)을 유지하세요.
+
+## 7. 검증
+
+머지 요청 전 반드시 통과해야 합니다.
+
+```bash
+npm run lint && npm run build
+```
+
+## 8. 요약 (한 줄 규칙)
+
+> **내 번호가 붙은 폴더만 만지고, 공유 파일은 읽기만 하고, 브랜치·워크트리·포트에 내 번호를 붙인다.**
