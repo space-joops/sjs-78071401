@@ -4,6 +4,8 @@ import type { FeatureConfig } from "./types";
 import feature1 from "./feature-1/config";
 import feature2 from "./feature-2/config";
 import feature3 from "./feature-3/config";
+// 3-1 (스텔라펫2): 조율자 승인 하에 추가된 서브 메뉴 (feature/3-stellarpet2)
+import feature3_1 from "./feature-3/stellar2/config";
 import feature4 from "./feature-4/config";
 import feature5 from "./feature-5/config";
 import feature6 from "./feature-6/config";
@@ -17,6 +19,7 @@ export const features: FeatureConfig[] = [
   feature1,
   feature2,
   feature3,
+  feature3_1,
   feature4,
   feature5,
   feature6,
