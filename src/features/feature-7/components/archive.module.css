@@ -1,0 +1,84 @@
+/* 기능 7 전용 애니메이션 — globals.css 수정 금지 규칙에 따라 CSS Module 사용 */
+
+.radar {
+  position: relative;
+  width: 9rem;
+  height: 9rem;
+  border-radius: 9999px;
+  border: 2px solid rgba(52, 211, 153, 0.35);
+  background:
+    radial-gradient(circle, rgba(52, 211, 153, 0.08) 0%, transparent 70%);
+  overflow: hidden;
+}
+
+.radar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(52, 211, 153, 0.55),
+    transparent 70deg,
+    transparent 360deg
+  );
+  animation: sweep 1.4s linear infinite;
+}
+
+.radar::after {
+  content: "";
+  position: absolute;
+  inset: 28%;
+  border-radius: 9999px;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+@keyframes sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pop {
+  animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.sheetUp {
+  animation: sheetUp 0.25s ease-out both;
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(2rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
