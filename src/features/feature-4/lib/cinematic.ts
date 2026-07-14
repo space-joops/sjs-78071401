@@ -170,7 +170,10 @@ export function buildGrain(size = 224, seed = 3): HTMLCanvasElement {
   return c;
 }
 
-/** 그레인을 프레임마다 미세하게 지터하며 타일링 (overlay 합성) */
+/**
+ * 그레인을 프레임마다 미세하게 지터하며 타일링.
+ * overlay 블렌드는 소프트웨어 렌더러에서 비싸서 저알파 source-over를 쓴다.
+ */
 export function drawGrain(
   ctx: CanvasRenderingContext2D,
   grain: HTMLCanvasElement,
@@ -183,8 +186,7 @@ export function drawGrain(
   const ox = jitter ? Math.floor((t * 53) % s) : 0;
   const oy = jitter ? Math.floor((t * 97) % s) : 0;
   ctx.save();
-  ctx.globalAlpha = 0.05;
-  ctx.globalCompositeOperation = "overlay";
+  ctx.globalAlpha = 0.04;
   for (let x = -ox; x < w; x += s) {
     for (let y = -oy; y < h; y += s) {
       ctx.drawImage(grain, x, y);
@@ -196,81 +198,55 @@ export function drawGrain(
 // ---------- 대기 ----------
 
 /**
- * 3겹 대기 스트립 프리렌더.
- * 스트립 내 수평선은 HORIZON_RATIO 위치 — drawAtmosphere가 지구 곡률을 따라 붙인다.
+ * 3겹 대기(바깥 바이올렛 헤일로 → 블루 밴드 → 시안 밝은 림)를
+ * 지구 원 중심 기준 radial 그라데이션 링으로 그린다 — 곡률을 완벽히 따라간다.
+ * 태양 쪽 수평선에는 웜톤 산란광을 얹는다.
  */
-export const ATMO_H = 150;
-export const ATMO_HORIZON_RATIO = 0.66;
-
-export function buildAtmosphereStrip(w: number, sunX01: number): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = Math.max(2, w);
-  c.height = ATMO_H;
-  const ctx = c.getContext("2d")!;
-  const hy = ATMO_H * ATMO_HORIZON_RATIO;
-
-  // 바깥 바이올렛 헤일로
-  const halo = ctx.createLinearGradient(0, 0, 0, hy);
-  halo.addColorStop(0, "rgba(150,130,255,0)");
-  halo.addColorStop(1, "rgba(150,130,255,0.10)");
-  ctx.fillStyle = halo;
-  ctx.fillRect(0, 0, w, hy);
-
-  // 중간 블루 밴드
-  const mid = ctx.createLinearGradient(0, hy - 46, 0, hy);
-  mid.addColorStop(0, "rgba(90,170,255,0)");
-  mid.addColorStop(1, "rgba(96,178,255,0.28)");
-  ctx.fillStyle = mid;
-  ctx.fillRect(0, hy - 46, w, 46);
-
-  // 안쪽 시안 밝은 림 (수평선 바로 위)
-  const rim = ctx.createLinearGradient(0, hy - 12, 0, hy + 2);
-  rim.addColorStop(0, "rgba(210,245,255,0)");
-  rim.addColorStop(1, "rgba(215,246,255,0.85)");
-  ctx.fillStyle = rim;
-  ctx.fillRect(0, hy - 12, w, 14);
-
-  // 수평선 아래로 짧게 잦아드는 산란광
-  const below = ctx.createLinearGradient(0, hy, 0, ATMO_H);
-  below.addColorStop(0, "rgba(190,235,255,0.5)");
-  below.addColorStop(1, "rgba(190,235,255,0)");
-  ctx.fillStyle = below;
-  ctx.fillRect(0, hy, w, ATMO_H - hy);
-
+export function drawAtmosphereRings(
+  ctx: CanvasRenderingContext2D,
+  ecx: number,
+  ecy: number,
+  R: number,
+  sunX: number,
+  sunHorizonY: number,
+) {
+  const ring = (r0: number, r1: number, stops: [number, string][]) => {
+    const g = ctx.createRadialGradient(ecx, ecy, Math.max(0, r0), ecx, ecy, r1);
+    for (const [o, col] of stops) g.addColorStop(o, col);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(ecx, ecy, r1, 0, Math.PI * 2);
+    ctx.arc(ecx, ecy, Math.max(0, r0), 0, Math.PI * 2, true);
+    ctx.fill();
+  };
+  ring(R, R + 64, [
+    [0, "rgba(150,130,255,0.12)"],
+    [1, "rgba(150,130,255,0)"],
+  ]);
+  ring(R, R + 26, [
+    [0, "rgba(96,178,255,0.30)"],
+    [1, "rgba(96,178,255,0)"],
+  ]);
+  ring(R - 3, R + 9, [
+    [0, "rgba(215,246,255,0)"],
+    [0.35, "rgba(215,246,255,0.8)"],
+    [1, "rgba(215,246,255,0)"],
+  ]);
   // 태양 쪽 웜톤 산란
-  const sx = sunX01 * w;
-  const warm = ctx.createRadialGradient(sx, hy, 0, sx, hy, w * 0.4);
-  warm.addColorStop(0, "rgba(255,196,140,0.22)");
+  const warm = ctx.createRadialGradient(
+    sunX,
+    sunHorizonY,
+    0,
+    sunX,
+    sunHorizonY,
+    R * 0.45,
+  );
+  warm.addColorStop(0, "rgba(255,196,140,0.16)");
   warm.addColorStop(1, "rgba(255,196,140,0)");
   ctx.fillStyle = warm;
-  ctx.fillRect(0, 0, w, ATMO_H);
-  return c;
-}
-
-/** 대기 스트립을 지구 곡률(yAt)을 따라 세로 슬라이스로 그린다 */
-export function drawAtmosphere(
-  ctx: CanvasRenderingContext2D,
-  strip: HTMLCanvasElement,
-  w: number,
-  yAt: (x: number) => number,
-) {
-  const slices = 12;
-  const sw = w / slices;
-  for (let i = 0; i < slices; i++) {
-    const x = i * sw;
-    const y = yAt(x + sw / 2);
-    ctx.drawImage(
-      strip,
-      x,
-      0,
-      sw,
-      ATMO_H,
-      x,
-      y - ATMO_H * ATMO_HORIZON_RATIO,
-      sw + 1,
-      ATMO_H,
-    );
-  }
+  ctx.beginPath();
+  ctx.arc(sunX, sunHorizonY, R * 0.45, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // ---------- 오로라 ----------
@@ -285,7 +261,7 @@ export function drawAurora(
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (let k = 0; k < 2; k++) {
-    const intensity = Math.max(0, Math.sin(t * 0.11 + k * 2.4)) * 0.13;
+    const intensity = (0.35 + 0.65 * Math.max(0, Math.sin(t * 0.11 + k * 2.4))) * 0.17;
     if (intensity < 0.015) continue;
     const x0 = w * (0.08 + k * 0.5 + 0.06 * Math.sin(t * 0.05 + k * 3));
     const width = w * 0.36;
@@ -295,8 +271,10 @@ export function drawAurora(
     for (let i = 0; i <= n; i++) {
       const x = x0 + (i / n) * width;
       const yb = yAt(x) + 4;
-      const hgt = 34 + 22 * Math.sin(t * 0.8 + x * 0.018 + k * 2);
-      const yt = yb - Math.max(14, hgt);
+      // 양끝을 0으로 수렴시키는 엔벨로프 — 사각형이 아닌 커튼 실루엣
+      const env = Math.pow(Math.sin((i / n) * Math.PI), 0.7);
+      const hgt = (52 + 26 * Math.sin(t * 0.8 + x * 0.018 + k * 2)) * env;
+      const yt = yb - Math.max(2, hgt);
       if (yt < minTop) minTop = yt;
       pts.push({ x, yb, yt });
     }

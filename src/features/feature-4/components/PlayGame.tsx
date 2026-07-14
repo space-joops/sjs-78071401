@@ -6,12 +6,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useGameState } from "../hooks/useGameState";
 import {
-  buildAtmosphereStrip,
   buildGrain,
   buildMoonSprite,
   buildSunSprite,
   buildVignette,
-  drawAtmosphere,
+  drawAtmosphereRings,
   drawAurora,
   drawBrightStars,
   drawGrain,
@@ -340,8 +339,46 @@ export default function PlayGame() {
     const moonSprite = buildMoonSprite(76);
     const grainTex = buildGrain(224);
     let vignetteTex: HTMLCanvasElement | null = null;
-    let atmoStrip: HTMLCanvasElement | null = null;
     let brightStars: BrightStar[] = [];
+    // 배경 그라데이션+성운+태양을 1장으로 프리컴포짓 — 프레임당 drawImage 1회
+    let staticSky: HTMLCanvasElement | null = null;
+    const buildStaticSky = () => {
+      const c = document.createElement("canvas");
+      c.width = Math.max(2, w);
+      c.height = Math.max(2, h);
+      const sctx = c.getContext("2d")!;
+      const sx = w * 0.84;
+      const sy2 = h * 0.12;
+      const bg = sctx.createLinearGradient(0, 0, 0, h);
+      bg.addColorStop(0, "#01020a");
+      bg.addColorStop(0.55, "#050d20");
+      bg.addColorStop(1, "#0a1e3c");
+      sctx.fillStyle = bg;
+      sctx.fillRect(0, 0, w, h);
+      const neb = sctx.createRadialGradient(sx, sy2, 0, sx, sy2, w * 0.75);
+      neb.addColorStop(0, "rgba(255,180,110,0.10)");
+      neb.addColorStop(1, "rgba(255,180,110,0)");
+      sctx.fillStyle = neb;
+      sctx.fillRect(0, 0, w, h);
+      const neb2 = sctx.createRadialGradient(
+        w * 0.06,
+        h * 0.45,
+        0,
+        w * 0.06,
+        h * 0.45,
+        w * 0.6,
+      );
+      neb2.addColorStop(0, "rgba(40,150,170,0.11)");
+      neb2.addColorStop(1, "rgba(40,150,170,0)");
+      sctx.fillStyle = neb2;
+      sctx.fillRect(0, 0, w, h);
+      sctx.drawImage(
+        sunSprite,
+        sx - sunSprite.width / 2,
+        sy2 - sunSprite.height / 2,
+      );
+      staticSky = c;
+    };
 
     let earthTex: HTMLCanvasElement | null = null;
     let nightTex: HTMLCanvasElement | null = null;
@@ -351,6 +388,8 @@ export default function PlayGame() {
     // 주야 블렌드용 오프스크린 밴드(밤 텍스처 + 터미네이터 마스크)
     const nightBand = document.createElement("canvas");
     const nightBandCtx = nightBand.getContext("2d")!;
+    let nightFrame = 0;
+    const nightCache = { off: 0, bandW: 0, bandH: 0 };
     loadWorld().then((world) => {
       earthTex = buildEarthTexture(world, 2048, 1024, "game");
       nightTex = buildNightTexture(world, 2048, 1024);
@@ -392,8 +431,8 @@ export default function PlayGame() {
       nightBand.width = Math.max(2, Math.ceil(w * 0.52));
       nightBand.height = Math.max(2, Math.ceil(h - horizonY + 96));
       vignetteTex = buildVignette(w, h);
-      atmoStrip = buildAtmosphereStrip(w, 0.84);
       brightStars = makeBrightStars(w, h);
+      buildStaticSky();
       buildStars();
     };
     resize();
@@ -781,28 +820,15 @@ export default function PlayGame() {
       // 태양 위치 — 우상단 고정, 터미네이터(왼쪽 밤)와 방향 일치
       const sunX = w * 0.84;
       const sunY = h * 0.12;
-      // 우주 배경 — 딥 네이비, 틸·오렌지 시네마 그레이딩
-      const bg = ctx.createLinearGradient(0, 0, 0, h);
-      bg.addColorStop(0, "#01020a");
-      bg.addColorStop(0.55, "#050d20");
-      bg.addColorStop(1, "#0a1e3c");
-      ctx.fillStyle = bg;
+      // 우주 배경(그라데이션+성운+태양) — 프리컴포짓 1장
+      ctx.fillStyle = "#01020a";
       ctx.fillRect(-20, -20, w + 40, h + 40);
-      // 성운: 태양 쪽 웜톤 + 반대쪽 틸
-      const neb = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, w * 0.75);
-      neb.addColorStop(0, "rgba(255,180,110,0.10)");
-      neb.addColorStop(1, "rgba(255,180,110,0)");
-      ctx.fillStyle = neb;
-      ctx.fillRect(0, 0, w, h);
-      const neb2 = ctx.createRadialGradient(w * 0.06, h * 0.45, 0, w * 0.06, h * 0.45, w * 0.6);
-      neb2.addColorStop(0, "rgba(40,150,170,0.11)");
-      neb2.addColorStop(1, "rgba(40,150,170,0)");
-      ctx.fillStyle = neb2;
-      ctx.fillRect(0, 0, w, h);
+      if (staticSky) ctx.drawImage(staticSky, 0, 0);
       // 달 — 최저속 패럴랙스
       {
         const span = w + 200;
-        const mx = ((((w * 0.18 - orbitPx * 0.05) % span) + span) % span) - 100;
+        const mx =
+          ((((w * 0.18 + 100 - orbitPx * 0.05) % span) + span) % span) - 100;
         ctx.drawImage(moonSprite, mx - 38, h * 0.1 - 38);
       }
       // 별(패럴랙스)
@@ -818,12 +844,6 @@ export default function PlayGame() {
       }
       // 밝은 별 십자 글린트
       drawBrightStars(ctx, brightStars, elapsed, orbitPx, w);
-      // 태양 — 신 레이가 아주 천천히 회전
-      ctx.save();
-      ctx.translate(sunX, sunY);
-      ctx.rotate(elapsed * 0.02);
-      ctx.drawImage(sunSprite, -sunSprite.width / 2, -sunSprite.height / 2);
-      ctx.restore();
       // 유성
       for (const m of meteors) {
         const a = Math.max(0, m.life / m.max);
@@ -882,38 +902,55 @@ export default function PlayGame() {
         // 밤 지역 — 태양 반대편(왼쪽)에서 천천히 표류하는 터미네이터.
         // 밤 텍스처를 같은 스크롤 오프셋으로 밴드에 그리고 가로 그라데이션으로
         // 마스킹해 낮 위에 얹는다 → 도시 불빛이 밤 지역에서 반짝인다.
+        // 밴드 합성은 3프레임마다 갱신하고, 사이 프레임은 스크롤 오프셋만 보정해 블릿.
         if (nightTex) {
-          const termX = w * (0.3 + 0.05 * Math.sin(elapsed * 0.01));
-          const soft = w * 0.16;
-          const bandW = Math.min(nightBand.width, Math.ceil(termX + soft));
-          const bandH = Math.min(nightBand.height, Math.ceil(dh));
-          nightBandCtx.clearRect(0, 0, nightBand.width, nightBand.height);
-          for (let dx = -off; dx < bandW + dw; dx += dw) {
-            nightBandCtx.drawImage(
-              nightTex,
+          nightFrame++;
+          if (nightFrame % 3 === 1 || nightCache.bandW === 0) {
+            const termX = w * (0.3 + 0.05 * Math.sin(elapsed * 0.01));
+            const soft = w * 0.16;
+            nightCache.bandW = Math.min(nightBand.width, Math.ceil(termX + soft));
+            nightCache.bandH = Math.min(nightBand.height, Math.ceil(dh));
+            nightCache.off = off;
+            nightBandCtx.clearRect(0, 0, nightBand.width, nightBand.height);
+            for (let dx = -off; dx < nightCache.bandW + dw; dx += dw) {
+              nightBandCtx.drawImage(
+                nightTex,
+                0,
+                sy,
+                nightTex.width,
+                sh,
+                dx,
+                0,
+                dw + 1,
+                dh,
+              );
+            }
+            nightBandCtx.globalCompositeOperation = "destination-in";
+            const mask = nightBandCtx.createLinearGradient(
+              termX - soft,
               0,
-              sy,
-              nightTex.width,
-              sh,
-              dx,
+              termX + soft,
               0,
-              dw + 1,
-              dh,
             );
+            mask.addColorStop(0, "rgba(0,0,0,0.93)");
+            mask.addColorStop(1, "rgba(0,0,0,0)");
+            nightBandCtx.fillStyle = mask;
+            nightBandCtx.fillRect(0, 0, nightCache.bandW, nightCache.bandH);
+            nightBandCtx.globalCompositeOperation = "source-over";
           }
-          nightBandCtx.globalCompositeOperation = "destination-in";
-          const mask = nightBandCtx.createLinearGradient(
-            termX - soft,
+          // 텍스처는 계속 흐르므로 캐시와의 오프셋 차이만큼 왼쪽으로 밀어 그린다
+          const shift = off - nightCache.off;
+          ctx.drawImage(
+            nightBand,
             0,
-            termX + soft,
             0,
+            nightCache.bandW,
+            nightCache.bandH,
+            -shift,
+            horizonY - 6,
+            nightCache.bandW,
+            nightCache.bandH,
           );
-          mask.addColorStop(0, "rgba(0,0,0,0.93)");
-          mask.addColorStop(1, "rgba(0,0,0,0)");
-          nightBandCtx.fillStyle = mask;
-          nightBandCtx.fillRect(0, 0, bandW, bandH);
-          nightBandCtx.globalCompositeOperation = "source-over";
-          ctx.drawImage(nightBand, 0, 0, bandW, bandH, 0, horizonY - 6, bandW, bandH);
         }
       } else {
         const og = ctx.createLinearGradient(0, horizonY, 0, h);
@@ -922,9 +959,15 @@ export default function PlayGame() {
         ctx.fillStyle = og;
         ctx.fillRect(0, horizonY - 6, w, h - horizonY + 20);
       }
+      // 수평선 안쪽으로 잦아드는 산란광(림) — 클립 안이라 곡률을 따라간다
+      const rim = ctx.createLinearGradient(0, horizonY - 8, 0, horizonY + 46);
+      rim.addColorStop(0, "rgba(190,235,255,0.5)");
+      rim.addColorStop(1, "rgba(190,235,255,0)");
+      ctx.fillStyle = rim;
+      ctx.fillRect(0, horizonY - 8, w, 54);
       ctx.restore();
-      // 3겹 대기(바이올렛 헤일로→블루→시안 림)가 곡률을 따라 수평선을 감싼다
-      if (atmoStrip) drawAtmosphere(ctx, atmoStrip, w, yAt);
+      // 3겹 대기(바이올렛 헤일로→블루→시안 림) — 지구 곡률을 그대로 감싼다
+      drawAtmosphereRings(ctx, ecx, ecy, R, sunX, yAt(sunX));
       // 오로라 커튼 — 수평선 위에서 서서히 명멸
       drawAurora(ctx, w, yAt, elapsed);
 
