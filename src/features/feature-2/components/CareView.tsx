@@ -63,21 +63,29 @@ export default function CareView() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const t = ts / 1000;
 
-      const bg = ctx.createRadialGradient(
-        cssW / 2,
-        cssH * 0.9,
-        20,
-        cssW / 2,
-        cssH * 0.9,
-        cssW
-      );
-      bg.addColorStop(0, "#0b2038");
-      bg.addColorStop(1, "#020409");
+      // 진한 보라 → 분홍 오로라 무대 조명
+      const bg = ctx.createLinearGradient(0, 0, 0, cssH);
+      bg.addColorStop(0, "#1c0f38");
+      bg.addColorStop(0.6, "#33195c");
+      bg.addColorStop(1, "#5d2c72");
       ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, cssW, cssH);
+      const halo = ctx.createRadialGradient(
+        cssW / 2,
+        cssH * 0.55,
+        10,
+        cssW / 2,
+        cssH * 0.55,
+        cssW * 0.55
+      );
+      halo.addColorStop(0, "rgba(249,168,212,0.22)");
+      halo.addColorStop(0.6, "rgba(196,181,253,0.1)");
+      halo.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = halo;
       ctx.fillRect(0, 0, cssW, cssH);
       for (const st of stars) {
         ctx.globalAlpha = 0.3 + 0.6 * Math.abs(Math.sin(t + st.ph));
-        ctx.fillStyle = "#e2e8f0";
+        ctx.fillStyle = "#fdf2f8";
         ctx.beginPath();
         ctx.arc(st.x * cssW, st.y * cssH, st.r, 0, Math.PI * 2);
         ctx.fill();
@@ -218,40 +226,42 @@ export default function CareView() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-2xl flex-col gap-3 p-3 sm:p-4">
         {/* 줍스 무대 */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/10">
+        <div className="relative overflow-hidden rounded-3xl border border-white/15 shadow-[0_6px_40px_rgba(90,40,130,0.4)]">
           <canvas ref={canvasRef} className="block h-52 w-full sm:h-64" />
           <div className="absolute left-3 top-3 flex flex-col gap-1">
-            <span className="w-fit rounded-full bg-black/50 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+            <span className="w-fit rounded-full border border-white/15 bg-white/[.12] px-2.5 py-1 text-[11px] font-semibold text-pink-50 backdrop-blur-md">
               {stage.name} · Lv.{level}
             </span>
             <span
-              className={`w-fit rounded-full px-2.5 py-1 text-[11px] backdrop-blur-sm ${
-                canCare ? "bg-emerald-500/70 text-white" : "bg-black/50 text-slate-300"
+              className={`w-fit rounded-full border px-2.5 py-1 text-[11px] backdrop-blur-md ${
+                canCare
+                  ? "border-emerald-200/40 bg-emerald-300/30 text-emerald-50"
+                  : "border-white/15 bg-white/[.12] text-pink-100/70"
               }`}
             >
               {quantum ? "🌐 퀀텀 링크" : inRange ? "📡 교신 양호" : "🛰️ 교신 범위 밖"}
             </span>
           </div>
           {notice && (
-            <p className="absolute inset-x-3 bottom-3 rounded-xl bg-black/60 px-3 py-2 text-center text-xs text-white backdrop-blur-sm">
+            <p className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/15 bg-white/[.14] px-3 py-2 text-center text-xs text-pink-50 backdrop-blur-md">
               {notice}
             </p>
           )}
         </div>
 
         {/* 이름 */}
-        <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[.04] px-4 py-3">
+        <div className="flex items-center justify-between rounded-3xl border border-white/15 bg-white/[.08] px-4 py-3 backdrop-blur-xl">
           {nameDraft === null ? (
             <>
-              <p className="text-sm font-bold text-white">
+              <p className="text-sm font-bold text-pink-50">
                 👾 {save.name}
-                <span className="ml-2 text-[11px] font-normal text-slate-500">
+                <span className="ml-2 text-[11px] font-normal text-purple-200/60">
                   함께한 지 {Math.max(1, Math.ceil((now - save.createdAt) / 86400_000))}일째
                 </span>
               </p>
               <button
                 onClick={() => setNameDraft(save.name)}
-                className="flex h-9 items-center rounded-lg px-3 text-xs text-slate-400 transition-colors hover:bg-white/10"
+                className="flex h-9 items-center rounded-xl px-3 text-xs text-pink-100/70 transition-all duration-300 hover:bg-white/10"
               >
                 ✏️ 이름 바꾸기
               </button>
@@ -263,11 +273,11 @@ export default function CareView() {
                 onChange={(e) => setNameDraft(e.target.value)}
                 maxLength={10}
                 autoFocus
-                className="h-10 min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 text-sm text-white outline-none focus:border-cyan-400/60"
+                className="h-10 min-w-0 flex-1 rounded-2xl border border-white/20 bg-white/[.07] px-3 text-sm text-pink-50 outline-none backdrop-blur-sm transition-all duration-300 focus:border-pink-300/60"
               />
               <button
                 onClick={saveName}
-                className="h-10 shrink-0 rounded-lg bg-cyan-500 px-4 text-xs font-semibold text-black"
+                className="h-10 shrink-0 rounded-2xl bg-gradient-to-r from-violet-400 to-pink-400 px-4 text-xs font-semibold text-white shadow-[0_2px_14px_rgba(244,114,182,0.4)]"
               >
                 저장
               </button>
@@ -276,18 +286,18 @@ export default function CareView() {
         </div>
 
         {/* 상태 바 */}
-        <div className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-white/[.04] p-4">
-          <StatBar label="체력" emoji="💗" value={save.hp} max={100} color="bg-rose-400" />
-          <StatBar label="에너지" emoji="⚡" value={save.energy} max={100} color="bg-amber-300" />
+        <div className="flex flex-col gap-2.5 rounded-3xl border border-white/15 bg-white/[.08] p-4 backdrop-blur-xl">
+          <StatBar label="체력" emoji="💗" value={save.hp} max={100} color="bg-pink-300" />
+          <StatBar label="에너지" emoji="⚡" value={save.energy} max={100} color="bg-amber-200" />
           <StatBar
             label={`경험치 (Lv.${level})`}
             emoji="✨"
             value={xpCur}
             max={xpNeed}
-            color="bg-cyan-300"
+            color="bg-violet-300"
           />
           {save.careNeeded && (
-            <p className="rounded-xl bg-rose-500/15 px-3 py-2 text-xs leading-relaxed text-rose-300">
+            <p className="rounded-2xl border border-rose-300/20 bg-rose-400/15 px-3 py-2 text-xs leading-relaxed text-rose-200">
               🚑 {save.name}가 다쳐서 치료가 필요해요. 치료 전까지 비행과 자동 청소가
               멈춰 있어요.
             </p>
@@ -296,24 +306,24 @@ export default function CareView() {
 
         {/* 교신 범위 밖 안내 */}
         {!canCare && (
-          <div className="rounded-2xl border border-white/10 bg-white/[.04] p-4 text-center">
-            <p className="text-sm font-semibold text-slate-200">
+          <div className="rounded-3xl border border-white/15 bg-white/[.08] p-4 text-center backdrop-blur-xl">
+            <p className="text-sm font-semibold text-pink-50">
               🛰️ {save.name}가 아직 머리 위에 없어요
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-pink-100/70">
               {save.owner.label} 상공 도달까지{" "}
-              <span className="font-bold tabular-nums text-white">
+              <span className="font-bold tabular-nums text-pink-50">
                 {eta === null ? "48시간 내 없음" : formatCountdown(eta - now)}
               </span>
             </p>
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+            <p className="mt-2 text-[11px] leading-relaxed text-purple-200/55">
               돌봄은 줍스가 교신 반경({radius.toLocaleString()}km) 안에 있을 때만
               가능해요. 비행 중 🔮 캡슐을 주우면 어디서든 돌볼 수 있어요.
             </p>
             {save.quantumCapsules > 0 && (
               <button
                 onClick={useQuantum}
-                className="mt-3 h-11 w-full rounded-xl bg-violet-500 text-sm font-semibold text-white transition-colors hover:bg-violet-400"
+                className="mt-3 h-11 w-full rounded-2xl bg-gradient-to-r from-violet-400 to-fuchsia-400 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(167,139,250,0.45)] transition-all duration-300 hover:shadow-[0_4px_28px_rgba(167,139,250,0.7)]"
               >
                 🔮 퀀텀 링크 사용 (보유 {save.quantumCapsules}개)
               </button>
@@ -352,7 +362,7 @@ export default function CareView() {
           <button
             onClick={heal}
             disabled={!canCare}
-            className="relative h-14 overflow-hidden rounded-2xl bg-rose-500 text-sm font-bold text-white transition-colors enabled:hover:bg-rose-400 disabled:opacity-40"
+            className="relative h-14 overflow-hidden rounded-3xl bg-gradient-to-r from-rose-400 to-pink-400 text-sm font-bold text-white shadow-[0_4px_22px_rgba(251,113,133,0.45)] transition-all duration-300 enabled:hover:shadow-[0_4px_30px_rgba(251,113,133,0.7)] disabled:opacity-40"
           >
             <span
               className="absolute inset-y-0 left-0 bg-white/25 transition-[width]"
@@ -366,14 +376,14 @@ export default function CareView() {
         {canCare && !quantum && save.quantumCapsules > 0 && (
           <button
             onClick={useQuantum}
-            className="h-11 rounded-xl border border-violet-400/40 bg-violet-500/15 text-xs font-semibold text-violet-300 transition-colors hover:bg-violet-500/25"
+            className="h-11 rounded-2xl border border-violet-300/30 bg-violet-400/15 text-xs font-semibold text-violet-200 backdrop-blur-xl transition-all duration-300 hover:bg-violet-400/25"
           >
             🔮 퀀텀 링크 사용 — {QUANTUM_LINK_MINUTES}분간 전 지구 교신 (보유{" "}
             {save.quantumCapsules}개)
           </button>
         )}
 
-        <p className="pb-2 text-center text-[11px] leading-relaxed text-slate-600">
+        <p className="pb-2 text-center text-[11px] leading-relaxed text-purple-200/45">
           지구 시민 모두가 한 마리 이상의 줍스를 보살피면
           케슬러 신드롬을 이겨낼 수 있어요 🌏
         </p>
@@ -397,7 +407,7 @@ function StatBar({
 }) {
   return (
     <div>
-      <div className="mb-1 flex justify-between text-[11px] text-slate-400">
+      <div className="mb-1 flex justify-between text-[11px] text-pink-100/70">
         <span>
           {emoji} {label}
         </span>
@@ -407,7 +417,7 @@ function StatBar({
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-white/10">
         <div
-          className={`h-full rounded-full ${color} transition-[width] duration-500`}
+          className={`h-full rounded-full ${color} shadow-[0_0_10px_rgba(255,200,240,0.35)] transition-[width] duration-500`}
           style={{ width: `${Math.max(0, Math.min(100, (value / max) * 100))}%` }}
         />
       </div>
@@ -432,11 +442,11 @@ function ActionButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/10 bg-white/[.06] px-2 py-3 transition-colors enabled:hover:bg-white/[.12] disabled:opacity-40"
+      className="flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-3xl border border-white/15 bg-white/[.08] px-2 py-3 backdrop-blur-xl transition-all duration-300 enabled:hover:border-pink-200/30 enabled:hover:bg-white/[.14] disabled:opacity-40"
     >
       <span className="text-xl">{emoji}</span>
-      <span className="text-xs font-semibold text-white">{label}</span>
-      <span className="text-[10px] text-slate-500">{sub}</span>
+      <span className="text-xs font-semibold text-pink-50">{label}</span>
+      <span className="text-[10px] text-purple-200/55">{sub}</span>
     </button>
   );
 }

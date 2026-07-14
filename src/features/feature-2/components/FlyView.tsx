@@ -98,7 +98,9 @@ export default function FlyView({
     let w = 0;
     let h = 0;
     let dpr = 1;
-    let stars: { x: number; y: number; r: number; ph: number }[] = [];
+    const STAR_TINTS = ["#fdf4ff", "#f5d0fe", "#e9d5ff", "#fbcfe8", "#ddd6fe"];
+    let stars: { x: number; y: number; r: number; ph: number; c: string }[] = [];
+    let nebulae: { x: number; y: number; r: number; color: string; ph: number }[] = [];
 
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
@@ -111,6 +113,19 @@ export default function FlyView({
         x: Math.random() * w,
         y: Math.random() * h,
         r: Math.random() * 1.3 + 0.3,
+        ph: Math.random() * Math.PI * 2,
+        c: STAR_TINTS[Math.floor(Math.random() * STAR_TINTS.length)],
+      }));
+      const NEBULA_COLORS = [
+        "rgba(167,139,250,0.14)",
+        "rgba(244,114,182,0.12)",
+        "rgba(129,140,248,0.10)",
+      ];
+      nebulae = NEBULA_COLORS.map((color, i) => ({
+        x: w * (0.2 + i * 0.3) + Math.random() * w * 0.15,
+        y: h * (0.1 + Math.random() * 0.35),
+        r: Math.max(w, h) * (0.28 + Math.random() * 0.2),
+        color,
         ph: Math.random() * Math.PI * 2,
       }));
     };
@@ -187,7 +202,7 @@ export default function FlyView({
       mutate((st) => {
         st.xp += amount;
       });
-      popups.push({ x, y, text: `+${amount}`, life: 1, color: "#a5f3fc" });
+      popups.push({ x, y, text: `+${amount}`, life: 1, color: "#f5d0fe" });
       const after = levelFromXp(s.xp);
       if (after > before) {
         sfx.levelUp();
@@ -245,13 +260,29 @@ export default function FlyView({
     const drawEarthScene = (now: number, t: number) => {
       const s = getState();
       const horizonY = h * 0.6;
-      // 별
-      ctx.fillStyle = "#020409";
+      // 하늘: 진한 보라 → 부드러운 분홍 오로라 그라데이션
+      const sky = ctx.createLinearGradient(0, 0, 0, horizonY + 60);
+      sky.addColorStop(0, "#150b2c");
+      sky.addColorStop(0.5, "#2c1650");
+      sky.addColorStop(0.82, "#472366");
+      sky.addColorStop(1, "#6d3577");
+      ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, h);
+      // 느리게 유영하는 성운 빛무리 (로파이 글로우)
+      for (const nb of nebulae) {
+        const nx = nb.x + Math.sin(t * 0.06 + nb.ph) * 30;
+        const ny = nb.y + Math.cos(t * 0.05 + nb.ph) * 18;
+        const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, nb.r);
+        ng.addColorStop(0, nb.color);
+        ng.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = ng;
+        ctx.fillRect(nx - nb.r, ny - nb.r, nb.r * 2, nb.r * 2);
+      }
+      // 파스텔 별
       for (const st of stars) {
         const a = 0.35 + 0.65 * Math.abs(Math.sin(t * 0.8 + st.ph));
         ctx.globalAlpha = a;
-        ctx.fillStyle = "#e2e8f0";
+        ctx.fillStyle = st.c;
         ctx.beginPath();
         ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
         ctx.fill();
@@ -306,30 +337,30 @@ export default function FlyView({
         Math.cos(g.lat * d2r) * Math.cos(sun.lat * d2r) * Math.cos((g.lon - sun.lon) * d2r);
       const nightA = Math.max(0, Math.min(0.5, (0.12 - cosang) * 0.45));
       if (nightA > 0.01) {
-        ctx.fillStyle = `rgba(2,6,23,${nightA})`;
+        ctx.fillStyle = `rgba(20,8,40,${nightA})`;
         ctx.fillRect(0, dy, w, dh + 40);
       }
 
-      // 대기 산란: 수평선 안쪽 글로우 (이즈-아웃으로 경계선 없이)
+      // 대기 산란: 수평선 안쪽의 라벤더-핑크 글로우 (이즈-아웃으로 경계선 없이)
       const atm = ctx.createLinearGradient(0, horizonY, 0, horizonY + 90);
-      atm.addColorStop(0, "rgba(165,230,255,0.5)");
-      atm.addColorStop(0.3, "rgba(165,230,255,0.16)");
-      atm.addColorStop(0.65, "rgba(165,230,255,0.05)");
-      atm.addColorStop(1, "rgba(165,230,255,0)");
+      atm.addColorStop(0, "rgba(240,205,255,0.5)");
+      atm.addColorStop(0.3, "rgba(240,205,255,0.16)");
+      atm.addColorStop(0.65, "rgba(240,205,255,0.05)");
+      atm.addColorStop(1, "rgba(240,205,255,0)");
       ctx.fillStyle = atm;
       ctx.fillRect(0, horizonY, w, 90);
       ctx.restore();
 
-      // 수평선 림 글로우 (대기층)
+      // 수평선 림 글로우 (몽환적 오로라빛 대기층)
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, R + 1, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(190,240,255,0.9)";
+      ctx.strokeStyle = "rgba(255,222,250,0.9)";
       ctx.lineWidth = 2.2;
-      ctx.shadowColor = "rgba(120,210,255,0.95)";
-      ctx.shadowBlur = 26;
+      ctx.shadowColor = "rgba(228,160,255,0.95)";
+      ctx.shadowBlur = 28;
       ctx.stroke();
-      ctx.strokeStyle = "rgba(90,170,255,0.2)";
+      ctx.strokeStyle = "rgba(196,120,255,0.2)";
       ctx.lineWidth = 18;
       ctx.stroke();
       ctx.restore();
@@ -602,7 +633,7 @@ export default function FlyView({
             eatMouthUntil = now + 350;
             sfx.eat(e.tier);
             burst(e.x, e.y, td.color, 7);
-            burst(e.x, e.y, "#a5f3fc", 4, "star", 150);
+            burst(e.x, e.y, "#f5d0fe", 4, "star", 150);
             eatenSinceSnack++;
             mutate((st) => {
               st.energy = Math.min(100, st.energy + 1.5 + e.tier);
@@ -707,7 +738,7 @@ export default function FlyView({
             life: 0.4,
             maxLife: 0.4,
             size: 2.5 + Math.random() * 2.5,
-            color: Math.random() < 0.5 ? "#67e8f9" : "#bae6fd",
+            color: Math.random() < 0.5 ? "#e9d5ff" : "#fbcfe8",
             shape: "dot",
           });
         }
@@ -770,7 +801,7 @@ export default function FlyView({
           if (e.name) {
             ctx.font = "11px sans-serif";
             ctx.textAlign = "center";
-            ctx.fillStyle = "rgba(226,232,240,0.85)";
+            ctx.fillStyle = "rgba(255,228,246,0.9)";
             ctx.fillText(`${e.name}네 줍스`, e.x, e.y - e.r - 14);
           }
         }
@@ -779,7 +810,7 @@ export default function FlyView({
       // 보호막 표시
       if (s.shieldUntil > now && !paused) {
         const a = 0.35 + 0.2 * Math.sin(t * 5);
-        ctx.strokeStyle = `rgba(103,232,249,${a})`;
+        ctx.strokeStyle = `rgba(216,180,254,${a})`;
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, 36, 0, Math.PI * 2);
@@ -902,38 +933,40 @@ export default function FlyView({
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden touch-none select-none">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
-      {/* HUD */}
+      {/* HUD — 글래스 패널 */}
       <div className="pointer-events-none absolute inset-x-2 top-2 flex flex-col gap-1.5 text-[11px]">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex w-40 flex-col gap-1 rounded-xl bg-black/45 p-2 backdrop-blur-sm">
-            <Bar label="체력" value={save.hp} max={100} color="bg-rose-400" />
-            <Bar label="에너지" value={save.energy} max={100} color="bg-amber-300" />
-            <Bar label={`Lv.${level}`} value={xpCur} max={xpNeed} color="bg-cyan-300" />
+          <div className="flex w-40 flex-col gap-1 rounded-2xl border border-white/15 bg-white/[.1] p-2 backdrop-blur-md">
+            <Bar label="체력" value={save.hp} max={100} color="bg-pink-300" />
+            <Bar label="에너지" value={save.energy} max={100} color="bg-amber-200" />
+            <Bar label={`Lv.${level}`} value={xpCur} max={xpNeed} color="bg-violet-300" />
           </div>
           <div className="flex flex-col items-end gap-1">
-            <span className="rounded-full bg-black/45 px-2.5 py-1 backdrop-blur-sm">
+            <span className="rounded-full border border-white/15 bg-white/[.12] px-2.5 py-1 text-pink-50 backdrop-blur-md">
               🧹 {save.cleanedCount.toLocaleString()}개 · {formatMass(save.cleanedMassKg)}
             </span>
             <span
-              className={`rounded-full px-2.5 py-1 backdrop-blur-sm ${
-                boosted ? "bg-emerald-500/70 text-white" : "bg-black/45 text-slate-300"
+              className={`rounded-full border px-2.5 py-1 backdrop-blur-md ${
+                boosted
+                  ? "border-emerald-200/40 bg-emerald-300/30 text-emerald-50"
+                  : "border-white/15 bg-white/[.12] text-pink-100/75"
               }`}
             >
               {quantum ? "🌐 퀀텀 링크 ×2" : inRange ? "📡 주인 상공 교신 ×2" : "🛰️ 원격 링크 ×1"}
             </span>
             {place && (
-              <span className="rounded-full bg-black/45 px-2.5 py-1 text-slate-300 backdrop-blur-sm">
+              <span className="rounded-full border border-white/15 bg-white/[.12] px-2.5 py-1 text-pink-100/75 backdrop-blur-md">
                 {place} 상공
               </span>
             )}
             <div className="flex gap-1">
               {save.shieldUntil > now && (
-                <span className="rounded-full bg-cyan-500/60 px-2 py-0.5">
+                <span className="rounded-full border border-cyan-200/30 bg-cyan-300/25 px-2 py-0.5 text-cyan-50 backdrop-blur-md">
                   🛡️ {Math.ceil((save.shieldUntil - now) / 1000)}s
                 </span>
               )}
               {save.magnetUntil > now && (
-                <span className="rounded-full bg-violet-500/60 px-2 py-0.5">
+                <span className="rounded-full border border-violet-200/30 bg-violet-300/25 px-2 py-0.5 text-violet-50 backdrop-blur-md">
                   🧲 {Math.ceil((save.magnetUntil - now) / 1000)}s
                 </span>
               )}
@@ -947,7 +980,7 @@ export default function FlyView({
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="rounded-full bg-black/60 px-3.5 py-1.5 text-xs text-white backdrop-blur-sm"
+            className="rounded-full border border-white/15 bg-white/[.14] px-3.5 py-1.5 text-xs text-pink-50 shadow-[0_2px_18px_rgba(150,80,190,0.35)] backdrop-blur-md"
           >
             {t.text}
           </div>
@@ -955,26 +988,26 @@ export default function FlyView({
       </div>
 
       {showHint && !save.careNeeded && (
-        <p className="pointer-events-none absolute inset-x-0 bottom-8 animate-pulse text-center text-xs text-slate-300">
+        <p className="pointer-events-none absolute inset-x-0 bottom-8 animate-pulse text-center text-xs text-pink-100/80">
           화면을 드래그해서 줍스를 조종하세요 · 반짝이는 빨간 테두리는 피하세요!
         </p>
       )}
 
       {/* 돌봄 필요 오버레이 (요구사항 5) */}
       {save.careNeeded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[2px]">
-          <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-white/15 bg-slate-900/90 p-5 text-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-[#160b28]/60 p-6 backdrop-blur-[3px]">
+          <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-white/20 bg-white/[.09] p-5 text-center shadow-[0_8px_50px_rgba(120,60,160,0.5)] backdrop-blur-2xl">
             <span className="text-4xl">🚑</span>
-            <p className="text-sm font-semibold text-white">
+            <p className="text-sm font-semibold text-pink-50">
               {save.name}가 다쳐서 비행할 수 없어요
             </p>
-            <p className="text-xs leading-relaxed text-slate-400">
+            <p className="text-xs leading-relaxed text-pink-100/70">
               처리할 수 없는 물체와 부딪혀 체력이 바닥났어요.
               주인의 보살핌이 필요해요.
             </p>
             <button
               onClick={onNeedCare}
-              className="mt-1 h-11 w-full rounded-xl bg-rose-500 text-sm font-semibold text-white transition-colors hover:bg-rose-400"
+              className="mt-1 h-11 w-full rounded-2xl bg-gradient-to-r from-rose-400 to-pink-400 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(251,113,133,0.4)] transition-all duration-300 hover:shadow-[0_4px_28px_rgba(251,113,133,0.65)]"
             >
               돌봄 탭으로 가기 💗
             </button>
@@ -998,7 +1031,7 @@ function Bar({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="w-9 shrink-0 text-right text-[10px] text-slate-300">{label}</span>
+      <span className="w-9 shrink-0 text-right text-[10px] text-pink-100/70">{label}</span>
       <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/15">
         <div
           className={`h-full rounded-full ${color} transition-[width] duration-300`}
