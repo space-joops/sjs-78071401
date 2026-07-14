@@ -12,7 +12,8 @@ import feature6 from "./feature-6/config";
 import feature7 from "./feature-7/config";
 import feature8 from "./feature-8/config";
 import feature9 from "./feature-9/config";
-// 12 (줍스 스위퍼): 조율자 승인 하에 추가된 메뉴 (feature/12-joops-sweeper)
+import feature10 from "./feature-10/config";
+import feature11 from "./feature-11/config";
 import feature12 from "./feature-12/config";
 
 export type { FeatureConfig };
@@ -28,5 +29,7 @@ export const features: FeatureConfig[] = [
   feature7,
   feature8,
   feature9,
+  feature10,
+  feature11,
   feature12,
 ];

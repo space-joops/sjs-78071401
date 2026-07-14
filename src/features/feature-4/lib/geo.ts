@@ -44,7 +44,7 @@ export function loadWorld(): Promise<WorldData | null> {
   return worldPromise;
 }
 
-function pointInFlatRing(flat: number[], lon: number, lat: number) {
+export function pointInFlatRing(flat: number[], lon: number, lat: number) {
   let inside = false;
   const n = flat.length / 2;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -59,16 +59,21 @@ function pointInFlatRing(flat: number[], lon: number, lat: number) {
   return inside;
 }
 
+/** 좌표가 나라 영토 안인가 (링 짝수-홀수 판정) */
+export function pointInCountry(c: CountryShape, lon: number, lat: number): boolean {
+  let inside = false;
+  for (const r of c.rings) {
+    const [a, b, x, y] = r.bbox;
+    if (lon < a || lon > x || lat < b || lat > y) continue;
+    if (pointInFlatRing(r.flat, lon, lat)) inside = !inside;
+  }
+  return inside;
+}
+
 /** 좌표가 속한 나라 이름(영문). 없으면 null */
 export function countryAt(world: WorldData, lon: number, lat: number): string | null {
   for (const c of world.countries) {
-    let inside = false;
-    for (const r of c.rings) {
-      const [a, b, x, y] = r.bbox;
-      if (lon < a || lon > x || lat < b || lat > y) continue;
-      if (pointInFlatRing(r.flat, lon, lat)) inside = !inside;
-    }
-    if (inside) return c.name;
+    if (pointInCountry(c, lon, lat)) return c.name;
   }
   return null;
 }

@@ -4,9 +4,27 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useFullscreen } from "../hooks/useFullscreen";
 import { useGameState } from "../hooks/useGameState";
+import {
+  buildGrain,
+  buildMoonSprite,
+  buildSunSprite,
+  buildVignette,
+  drawAtmosphereRings,
+  drawAurora,
+  drawBrightStars,
+  drawGrain,
+  drawLensFlare,
+  makeBrightStars,
+  type BrightStar,
+} from "../lib/cinematic";
 import { DEBRIS, FRIEND_NAMES, stageForLevel } from "../lib/constants";
-import { buildCloudTexture, buildEarthTexture } from "../lib/earthTexture";
+import {
+  buildCloudTexture,
+  buildEarthTexture,
+  buildNightTexture,
+} from "../lib/earthTexture";
 import { loadWorld } from "../lib/geo";
 import { joopsDataUrl } from "../lib/joopsArt";
 import { isInContact } from "../lib/orbit";
@@ -48,6 +66,8 @@ type Particle = {
   size: number;
   color: string;
   heart?: boolean;
+  /** 지정 시 중심 주위를 도는 궤도 하트(친구 조우 연출) */
+  orbit?: { cx: number; cy: number; ang: number; vang: number; rad: number; vrad: number };
 };
 type FloatText = {
   x: number;
@@ -57,6 +77,7 @@ type FloatText = {
   text: string;
   color: string;
   size: number;
+  rot: number;
 };
 
 type Hud = {
@@ -66,6 +87,8 @@ type Hud = {
   combo: number;
   mult: number;
   boost: number;
+  /** 최근 4초간 이벤트가 없으면 true — HUD 자동 딤 */
+  dim: boolean;
 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -230,6 +253,29 @@ function makeSprite(kind: string, size: number): HTMLCanvasElement {
   return c;
 }
 
+/** 전체화면 진입/종료 아이콘 — 네 모서리 브래킷이 안/밖으로 뒤집힌다 */
+function FullscreenIcon({ active }: { active: boolean }) {
+  const corners = active
+    ? ["9 3 9 9 3 9", "15 3 15 9 21 9", "15 21 15 15 21 15", "9 21 9 15 3 15"]
+    : ["3 9 3 3 9 3", "21 9 21 3 15 3", "21 15 21 21 15 21", "3 15 3 21 9 21"];
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-[18px] w-[18px]"
+      aria-hidden
+    >
+      {corners.map((pts) => (
+        <polyline key={pts} points={pts} />
+      ))}
+    </svg>
+  );
+}
+
 export default function PlayGame() {
   const router = useRouter();
   const { save, ready, mutate } = useGameState();
@@ -244,6 +290,7 @@ export default function PlayGame() {
   const appliedRef = useRef(false);
   const finishRef = useRef<(() => void) | null>(null);
   const boostReqRef = useRef(false);
+  const fs = useFullscreen(wrapRef);
 
   useEffect(() => {
     if (!ready || startedRef.current) return;
@@ -261,6 +308,8 @@ export default function PlayGame() {
     const stage = stageForLevel(s0.joops.level);
     const maxTier = stage.maxTier;
     const startHp = s0.joops.hp;
+    const reduceMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
     // ----- 세션 상태 -----
     let w = 0;
@@ -279,9 +328,28 @@ export default function PlayGame() {
     let combo = 0;
     let comboT = 0;
     let invulnT = 0;
-    let shakeT = 0;
     let flashT = 0;
     let eatPulse = 0;
+    // 게임필: 히트스톱·카메라(킥/셰이크/줌)·스쿼시&스트레치·링·스피드라인
+    let lastEventT = 0;
+    let hitStopT = 0;
+    const cam = { kx: 0, ky: 0, shake: 0, zoom: 1 };
+    const squash = { sx: 1, sy: 1 };
+    let rings: {
+      x: number;
+      y: number;
+      r: number;
+      vr: number;
+      life: number;
+      max: number;
+      color: string;
+    }[] = [];
+    let speedLines: { x: number; y: number; len: number; life: number }[] = [];
+    // 하늘 이벤트: 유성 + 위성 행렬(스타링크 오마주)
+    let meteors: { x: number; y: number; vx: number; vy: number; life: number; max: number }[] = [];
+    let meteorT = rand(6, 14);
+    let train: { x: number; y: number; vx: number; n: number } | null = null;
+    let trainT = rand(28, 50);
     let boostMeter = 30;
     let boostT = 0;
     let hp = startHp;
@@ -310,12 +378,67 @@ export default function PlayGame() {
     sprites.set("sat", makeSprite("sat", 20));
     sprites.set("booster", makeSprite("booster", 16));
 
+    // 시네마틱 프리렌더 에셋
+    const sunSprite = buildSunSprite(460);
+    const moonSprite = buildMoonSprite(76);
+    const grainTex = buildGrain(224);
+    let vignetteTex: HTMLCanvasElement | null = null;
+    let brightStars: BrightStar[] = [];
+    // 배경 그라데이션+성운+태양을 1장으로 프리컴포짓 — 프레임당 drawImage 1회
+    let staticSky: HTMLCanvasElement | null = null;
+    const buildStaticSky = () => {
+      const c = document.createElement("canvas");
+      c.width = Math.max(2, w);
+      c.height = Math.max(2, h);
+      const sctx = c.getContext("2d")!;
+      const sx = w * 0.84;
+      const sy2 = h * 0.12;
+      const bg = sctx.createLinearGradient(0, 0, 0, h);
+      bg.addColorStop(0, "#01020a");
+      bg.addColorStop(0.55, "#050d20");
+      bg.addColorStop(1, "#0a1e3c");
+      sctx.fillStyle = bg;
+      sctx.fillRect(0, 0, w, h);
+      const neb = sctx.createRadialGradient(sx, sy2, 0, sx, sy2, w * 0.75);
+      neb.addColorStop(0, "rgba(255,180,110,0.10)");
+      neb.addColorStop(1, "rgba(255,180,110,0)");
+      sctx.fillStyle = neb;
+      sctx.fillRect(0, 0, w, h);
+      const neb2 = sctx.createRadialGradient(
+        w * 0.06,
+        h * 0.45,
+        0,
+        w * 0.06,
+        h * 0.45,
+        w * 0.6,
+      );
+      neb2.addColorStop(0, "rgba(40,150,170,0.11)");
+      neb2.addColorStop(1, "rgba(40,150,170,0)");
+      sctx.fillStyle = neb2;
+      sctx.fillRect(0, 0, w, h);
+      // 원경 별은 스크롤이 사실상 0이라 하늘에 함께 굽는다(풀스크린 블릿 2회 절약)
+      if (starsFar) sctx.drawImage(starsFar, 0, 0);
+      sctx.drawImage(
+        sunSprite,
+        sx - sunSprite.width / 2,
+        sy2 - sunSprite.height / 2,
+      );
+      staticSky = c;
+    };
+
     let earthTex: HTMLCanvasElement | null = null;
+    let nightTex: HTMLCanvasElement | null = null;
     let cloudTex: HTMLCanvasElement | null = null;
     let starsFar: HTMLCanvasElement | null = null;
     let starsNear: HTMLCanvasElement | null = null;
+    // 주야 블렌드용 오프스크린 밴드(밤 텍스처 + 터미네이터 마스크)
+    const nightBand = document.createElement("canvas");
+    const nightBandCtx = nightBand.getContext("2d")!;
+    let nightFrame = 0;
+    const nightCache = { off: 0, bandW: 0, bandH: 0 };
     loadWorld().then((world) => {
       earthTex = buildEarthTexture(world, 2048, 1024, "game");
+      nightTex = buildNightTexture(world, 2048, 1024);
       cloudTex = buildCloudTexture(1400, 500, 11);
     });
 
@@ -351,7 +474,12 @@ export default function PlayGame() {
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       horizonY = h * 0.7;
+      nightBand.width = Math.max(2, Math.ceil(w * 0.52));
+      nightBand.height = Math.max(2, Math.ceil(h - horizonY + 96));
+      vignetteTex = buildVignette(w, h);
+      brightStars = makeBrightStars(w, h);
       buildStars();
+      buildStaticSky();
     };
     resize();
     jp.x = w * 0.3;
@@ -362,6 +490,7 @@ export default function PlayGame() {
 
     // ----- 입력 -----
     let dragging = false;
+    let firstTouch = true;
     const clampTarget = () => {
       jp.tx = Math.max(36, Math.min(w * 0.82, jp.tx));
       jp.ty = Math.max(64, Math.min(horizonY - 36, jp.ty));
@@ -371,6 +500,12 @@ export default function PlayGame() {
       jp.tx = e.offsetX;
       jp.ty = e.offsetY - 60;
       clampTarget();
+      // 첫 터치 제스처에 편승해 전체화면 진입 시도(지원 브라우저만 — iOS Safari는
+      // 임의 요소의 Fullscreen API를 지원하지 않아 여기선 조용히 no-op된다)
+      if (firstTouch && e.pointerType === "touch") {
+        firstTouch = false;
+        fs.enter();
+      }
     };
     const onMove = (e: PointerEvent) => {
       if (!dragging) return;
@@ -477,7 +612,19 @@ export default function PlayGame() {
       }
     };
     const addText = (x: number, y: number, text: string, color: string, size = 15) => {
-      texts.push({ x, y, life: 1.1, max: 1.1, text, color, size });
+      texts.push({
+        x,
+        y,
+        life: 1.1,
+        max: 1.1,
+        text,
+        color,
+        size,
+        rot: rand(-0.14, 0.14),
+      });
+    };
+    const addRing = (x: number, y: number, color: string, r0 = 6, vr = 170) => {
+      rings.push({ x, y, r: r0, vr, life: 0.45, max: 0.45, color });
     };
 
     // ----- 종료 -----
@@ -511,12 +658,37 @@ export default function PlayGame() {
     };
     finishRef.current = finish;
 
+    /** 피격 공통 처리 — 카메라 킥·셰이크·히트스톱·스쿼시 */
+    const applyHit = (dmg: number, hx: number, hy: number, label: string) => {
+      hp = Math.max(0, hp - dmg);
+      invulnT = 1.6;
+      flashT = 1;
+      combo = 0;
+      cam.shake = 1;
+      const dx = jp.x - hx;
+      const dy = jp.y - hy;
+      const d = Math.max(1, Math.hypot(dx, dy));
+      cam.kx += (dx / d) * 9;
+      cam.ky += (dy / d) * 8;
+      squash.sx = 0.82;
+      squash.sy = 1.18;
+      if (!reduceMotion) hitStopT = 0.07;
+      lastEventT = elapsed;
+      addText(jp.x, jp.y - 40, label, "#ff8f8f", 17);
+      if (hp <= 0) finish();
+    };
+
     // ----- 메인 루프 -----
+    let frameAvgMs = 16;
     const loop = (nowMs: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.05, (nowMs - last) / 1000);
+      const rawMs = nowMs - last;
+      const dt = Math.min(0.05, rawMs / 1000);
       last = nowMs;
       elapsed += dt;
+      // 적응형 저사양 모드 — 평균 프레임타임이 45ms를 넘으면 장식 효과 생략
+      frameAvgMs = frameAvgMs * 0.95 + Math.min(120, rawMs) * 0.05;
+      const lowFx = frameAvgMs > 45;
 
       // 교신 배율(부스터/상공) 주기 갱신
       multT -= dt;
@@ -533,19 +705,53 @@ export default function PlayGame() {
       }
 
       // --- 업데이트 ---
+      // 히트스톱: 임팩트 순간 세계를 잠깐 멈춘다(렌더는 계속) — udt=0
+      if (hitStopT > 0) hitStopT -= rawMs / 1000;
+      const udt = hitStopT > 0 ? 0 : dt;
       const speedMul = boostT > 0 ? 2.1 : 1;
       if (boostReqRef.current) {
         boostReqRef.current = false;
         if (boostT <= 0 && boostMeter >= 30) {
           boostMeter -= 30;
           boostT = 3;
+          lastEventT = elapsed;
           addText(jp.x, jp.y - 50, "부스트! 🚀", "#7ef2d8", 18);
+          addRing(jp.x, jp.y, "rgba(126,242,216,0.9)", 10, 260);
         }
       }
-      if (boostT > 0) boostT -= dt;
+      if (boostT > 0) boostT -= udt;
+
+      // 카메라 스프링·감쇠와 스쿼시 복원(실시간 dt — 히트스톱과 무관)
+      cam.kx *= Math.exp(-7 * dt);
+      cam.ky *= Math.exp(-7 * dt);
+      cam.shake *= Math.exp(-4.2 * dt);
+      if (cam.shake < 0.01) cam.shake = 0;
+      const zoomTarget = boostT > 0 ? 1.04 : 1;
+      cam.zoom += (zoomTarget - cam.zoom) * Math.min(1, 6 * dt);
+      squash.sx += (1 - squash.sx) * Math.min(1, 11 * dt);
+      squash.sy += (1 - squash.sy) * Math.min(1, 11 * dt);
+      // 부스트 스피드라인
+      if (boostT > 0 && !reduceMotion) {
+        speedLines.push({
+          x: w + 10,
+          y: rand(40, horizonY),
+          len: rand(40, 110),
+          life: rand(0.25, 0.45),
+        });
+      }
+      speedLines = speedLines.filter((sl) => {
+        sl.life -= dt;
+        sl.x -= 900 * dt;
+        return sl.life > 0 && sl.x + sl.len > -20;
+      });
+      rings = rings.filter((rg) => {
+        rg.life -= dt;
+        rg.r += rg.vr * dt;
+        return rg.life > 0;
+      });
 
       if (keys.size) {
-        const sp = 320 * dt;
+        const sp = 320 * udt;
         if (keys.has("ArrowUp")) jp.ty -= sp;
         if (keys.has("ArrowDown")) jp.ty += sp;
         if (keys.has("ArrowLeft")) jp.tx -= sp;
@@ -553,42 +759,76 @@ export default function PlayGame() {
         clampTarget();
       }
       const prevY = jp.y;
-      jp.x += (jp.tx - jp.x) * Math.min(1, 9 * dt);
-      jp.y += (jp.ty - jp.y) * Math.min(1, 9 * dt);
-      jp.y += Math.sin(elapsed * 2.2) * 8 * dt; // 무중력 부유감
-      jp.vy = (jp.y - prevY) / Math.max(dt, 0.001);
+      jp.x += (jp.tx - jp.x) * Math.min(1, 9 * udt);
+      jp.y += (jp.ty - jp.y) * Math.min(1, 9 * udt);
+      jp.y += Math.sin(elapsed * 2.2) * 8 * udt; // 무중력 부유감
+      jp.vy = udt > 0 ? (jp.y - prevY) / udt : 0;
 
-      orbitPx += 26 * speedMul * dt;
+      orbitPx += 26 * speedMul * udt;
 
-      debrisT -= dt * speedMul;
+      debrisT -= udt * speedMul;
       if (debrisT <= 0) {
         debrisT = rand(0.5, 1.05) * Math.max(0.55, 1 - elapsed / 300);
         spawnDebris();
       }
-      friendT -= dt;
+      friendT -= udt;
       if (friendT <= 0) {
         friendT = rand(24, 42);
         spawnFriend();
       }
-      boosterT -= dt;
+      boosterT -= udt;
       if (boosterT <= 0) {
         boosterT = rand(60, 110);
         spawnBooster();
       }
+      // 하늘 이벤트
+      meteorT -= udt;
+      if (meteorT <= 0) {
+        meteorT = rand(8, 20);
+        meteors.push({
+          x: rand(w * 0.25, w * 1.05),
+          y: rand(0, h * 0.3),
+          vx: -rand(340, 540),
+          vy: rand(130, 230),
+          life: 0.7,
+          max: 0.7,
+        });
+      }
+      meteors = meteors.filter((m) => {
+        m.life -= udt;
+        m.x += m.vx * udt;
+        m.y += m.vy * udt;
+        return m.life > 0;
+      });
+      trainT -= udt;
+      if (trainT <= 0 && !train) {
+        train = {
+          x: w + 30,
+          y: rand(h * 0.08, h * 0.3),
+          vx: -rand(36, 56),
+          n: 4 + Math.floor(Math.random() * 3),
+        };
+      }
+      if (train) {
+        train.x += train.vx * udt;
+        if (train.x < -train.n * 14 - 30) {
+          train = null;
+          trainT = rand(40, 70);
+        }
+      }
 
-      comboT -= dt;
+      comboT -= udt;
       if (comboT <= 0) combo = 0;
-      if (invulnT > 0) invulnT -= dt;
-      if (shakeT > 0) shakeT -= dt * 2.2;
+      if (invulnT > 0) invulnT -= udt;
       if (flashT > 0) flashT -= dt * 2.5;
       if (eatPulse > 0) eatPulse -= dt * 3;
 
       const eatR = 26 * (boostT > 0 ? 1.4 : 1);
       ents = ents.filter((e) => {
-        e.wob += dt;
-        e.x += e.vx * speedMul * dt;
-        e.y += e.vy * dt + Math.sin(e.wob * 1.7) * 12 * dt;
-        e.rot += e.vrot * dt;
+        e.wob += udt;
+        e.x += e.vx * speedMul * udt;
+        e.y += e.vy * udt + Math.sin(e.wob * 1.7) * 12 * udt;
+        e.rot += e.vrot * udt;
         // 부스트 중 자석 효과: 먹을 수 있는 것만 끌어당김
         if (
           boostT > 0 &&
@@ -600,15 +840,15 @@ export default function PlayGame() {
           const dy = jp.y - e.y;
           const d = Math.hypot(dx, dy);
           if (d < 220 && d > 1) {
-            e.x += (dx / d) * 190 * dt;
-            e.y += (dy / d) * 190 * dt;
+            e.x += (dx / d) * 190 * udt;
+            e.y += (dy / d) * 190 * udt;
           }
         }
         if (e.x < -120) return false;
         if (e.kind === "friend" && e.met) {
-          e.metT = (e.metT ?? 0) + dt;
-          e.vx += 60 * dt;
-          e.vy -= 20 * dt;
+          e.metT = (e.metT ?? 0) + udt;
+          e.vx += 60 * udt;
+          e.vy -= 20 * udt;
         }
 
         const d = Math.hypot(e.x - jp.x, e.y - jp.y);
@@ -628,44 +868,68 @@ export default function PlayGame() {
             session.satiety += 1.2;
             boostMeter = Math.min(100, boostMeter + 7);
             eatPulse = 1;
+            lastEventT = elapsed;
+            // 냠 반응: 스쿼시 + 링 펄스 + 살짝 카메라 킥, 큰 쓰레기는 미세 히트스톱
+            squash.sx = 1.2;
+            squash.sy = 0.82;
+            addRing(e.x, e.y, "rgba(126,242,216,0.8)");
+            cam.kx += (e.x - jp.x) * 0.014;
+            cam.ky += (e.y - jp.y) * 0.014;
+            if (e.type.tier >= 3 && !reduceMotion) hitStopT = 0.035;
             burst(e.x, e.y, ["#7ef2d8", "#ffd95e", "#ffffff"], 10);
             addText(e.x, e.y - 14, `+${Math.round(gained)}`, "#ffd95e");
             if (combo > 0 && combo % 5 === 0) {
               addText(jp.x, jp.y - 56, `콤보 ×${combo}!`, "#ff9fb2", 19);
+              addRing(jp.x, jp.y, "rgba(255,159,178,0.9)", 12, 240);
+              if (combo >= 10) {
+                burst(jp.x, jp.y - 10, ["#ffd95e", "#ffffff"], 12);
+              }
             }
             return false;
           }
           if (!edible && invulnT <= 0 && d < e.r + 24) {
-            hp = Math.max(0, hp - 12);
-            invulnT = 1.6;
-            shakeT = 1;
-            flashT = 1;
-            combo = 0;
             burst(e.x, e.y, ["#ff8f8f", "#ffd0d0"], 8);
-            addText(jp.x, jp.y - 40, "쿵! -12", "#ff8f8f", 17);
-            if (hp <= 0) finish();
+            applyHit(12, e.x, e.y, "쿵! -12");
             return true;
           }
         } else if (e.kind === "sat") {
           if (invulnT <= 0 && d < e.r + 26) {
-            hp = Math.max(0, hp - 15);
-            invulnT = 1.6;
-            shakeT = 1;
-            flashT = 1;
-            combo = 0;
             burst(jp.x, jp.y, ["#ff8f8f", "#ffe2a8"], 10);
-            addText(jp.x, jp.y - 40, "위성 충돌! -15", "#ff8f8f", 17);
-            if (hp <= 0) finish();
+            applyHit(15, e.x, e.y, "위성 충돌! -15");
           }
         } else if (e.kind === "friend" && !e.met) {
           if (d < e.r + 34) {
-            // 친구 줍스 조우(요구 7) — 깜찍한 하트 폭죽
+            // 친구 줍스 조우(요구 7) — 하트 폭죽 + 1초간 도는 궤도 하트
             e.met = true;
             e.metT = 0;
             session.friends += 1;
             const gained = 25 * mult;
             session.xp += gained;
-            burst((e.x + jp.x) / 2, (e.y + jp.y) / 2, ["#ff9fb2", "#ffd95e"], 14, true);
+            const mx = (e.x + jp.x) / 2;
+            const my = (e.y + jp.y) / 2;
+            burst(mx, my, ["#ff9fb2", "#ffd95e"], 8, true);
+            for (let i = 0; i < 6; i++) {
+              parts.push({
+                x: mx,
+                y: my,
+                vx: 0,
+                vy: 0,
+                life: 1.1,
+                max: 1.1,
+                size: 13,
+                color: "#ff9fb2",
+                heart: true,
+                orbit: {
+                  cx: mx,
+                  cy: my,
+                  ang: (i / 6) * Math.PI * 2,
+                  vang: 3.6,
+                  rad: 12,
+                  vrad: 26,
+                },
+              });
+            }
+            addRing(mx, my, "rgba(255,159,178,0.8)", 10, 200);
             addText(e.x, e.y - 44, `${e.name} 만남! +${gained}`, "#ff9fb2", 16);
           }
         } else if (e.kind === "booster") {
@@ -680,60 +944,93 @@ export default function PlayGame() {
       });
 
       parts = parts.filter((p) => {
-        p.life -= dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.vy += (p.heart ? -12 : 60) * dt;
+        p.life -= udt;
+        if (p.orbit) {
+          p.orbit.ang += p.orbit.vang * udt;
+          p.orbit.rad += p.orbit.vrad * udt;
+          p.x = p.orbit.cx + Math.cos(p.orbit.ang) * p.orbit.rad;
+          p.y = p.orbit.cy + Math.sin(p.orbit.ang) * p.orbit.rad * 0.6;
+        } else {
+          p.x += p.vx * udt;
+          p.y += p.vy * udt;
+          p.vy += (p.heart ? -12 : 60) * udt;
+        }
         return p.life > 0;
       });
       texts = texts.filter((t) => {
-        t.life -= dt;
-        t.y -= 34 * dt;
+        t.life -= udt;
+        t.y -= 34 * udt;
         return t.life > 0;
       });
 
       // --- 그리기 ---
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (shakeT > 0) {
+      // 카메라: 저주파 드리프트 + 임팩트 킥 + 지수감쇠 셰이크 + 부스트 줌
+      if (cam.zoom > 1.001) {
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(cam.zoom, cam.zoom);
+        ctx.translate(-w / 2, -h / 2);
+      }
+      if (!reduceMotion) {
         ctx.translate(
-          Math.sin(elapsed * 60) * 7 * shakeT,
-          Math.cos(elapsed * 47) * 6 * shakeT,
+          Math.sin(elapsed * 0.35) * 3 + cam.kx + Math.sin(elapsed * 61) * 8 * cam.shake,
+          Math.cos(elapsed * 0.27) * 2.5 + cam.ky + Math.cos(elapsed * 47) * 7 * cam.shake,
         );
       }
-      // 우주 배경
-      const bg = ctx.createLinearGradient(0, 0, 0, h);
-      bg.addColorStop(0, "#03030d");
-      bg.addColorStop(0.55, "#0a1030");
-      bg.addColorStop(1, "#12305c");
-      ctx.fillStyle = bg;
+      // 태양 위치 — 우상단 고정, 터미네이터(왼쪽 밤)와 방향 일치
+      const sunX = w * 0.84;
+      const sunY = h * 0.12;
+      // 우주 배경(그라데이션+성운+태양) — 프리컴포짓 1장
+      ctx.fillStyle = "#01020a";
       ctx.fillRect(-20, -20, w + 40, h + 40);
-      // 성운
-      const neb = ctx.createRadialGradient(w * 0.8, h * 0.15, 0, w * 0.8, h * 0.15, w * 0.7);
-      neb.addColorStop(0, "rgba(120,80,200,0.14)");
-      neb.addColorStop(1, "rgba(120,80,200,0)");
-      ctx.fillStyle = neb;
-      ctx.fillRect(0, 0, w, h);
-      const neb2 = ctx.createRadialGradient(w * 0.1, h * 0.4, 0, w * 0.1, h * 0.4, w * 0.6);
-      neb2.addColorStop(0, "rgba(40,150,170,0.12)");
-      neb2.addColorStop(1, "rgba(40,150,170,0)");
-      ctx.fillStyle = neb2;
-      ctx.fillRect(0, 0, w, h);
-      // 별(패럴랙스)
-      if (starsFar) {
-        const off = (orbitPx * 0.25) % w;
-        ctx.drawImage(starsFar, -off, 0);
-        ctx.drawImage(starsFar, w - off, 0);
+      if (staticSky) ctx.drawImage(staticSky, 0, 0);
+      // 달 — 최저속 패럴랙스
+      {
+        const span = w + 200;
+        const mx =
+          ((((w * 0.18 + 100 - orbitPx * 0.05) % span) + span) % span) - 100;
+        ctx.drawImage(moonSprite, mx - 38, h * 0.1 - 38);
       }
+      // 근경 별(패럴랙스) — 원경 별은 staticSky에 구워져 있다
       if (starsNear) {
         const off = (orbitPx * 0.6) % w;
         ctx.drawImage(starsNear, -off, 0);
         ctx.drawImage(starsNear, w - off, 0);
+      }
+      // 밝은 별 십자 글린트
+      drawBrightStars(ctx, brightStars, elapsed, orbitPx, w);
+      // 유성
+      for (const m of meteors) {
+        const a = Math.max(0, m.life / m.max);
+        const tx = m.x - m.vx * 0.13;
+        const ty = m.y - m.vy * 0.13;
+        const mg = ctx.createLinearGradient(m.x, m.y, tx, ty);
+        mg.addColorStop(0, `rgba(255,255,255,${0.85 * a})`);
+        mg.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.strokeStyle = mg;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+      }
+      // 위성 행렬 — 원경을 일렬로 지나가는 작은 점들
+      if (train) {
+        ctx.fillStyle = "rgba(220,235,255,0.75)";
+        for (let i = 0; i < train.n; i++) {
+          ctx.beginPath();
+          ctx.arc(train.x + i * 14, train.y + i * 1.2, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // 지구 — 실제 대륙 텍스처가 흐르며 자전/궤도 비행 느낌(요구 6)
       const R = Math.max(w, h) * 1.5;
       const ecx = w / 2;
       const ecy = horizonY + R;
+      // 지구 곡률을 따르는 수평선 y(x) — 대기·오로라가 이 곡선에 붙는다
+      const yAt = (x: number) =>
+        ecy - Math.sqrt(Math.max(0, R * R - (x - ecx) * (x - ecx)));
       ctx.save();
       ctx.beginPath();
       ctx.arc(ecx, ecy, R, 0, Math.PI * 2);
@@ -757,6 +1054,59 @@ export default function PlayGame() {
           }
           ctx.globalAlpha = 1;
         }
+        // 밤 지역 — 태양 반대편(왼쪽)에서 천천히 표류하는 터미네이터.
+        // 밤 텍스처를 같은 스크롤 오프셋으로 밴드에 그리고 가로 그라데이션으로
+        // 마스킹해 낮 위에 얹는다 → 도시 불빛이 밤 지역에서 반짝인다.
+        // 밴드 합성은 3프레임마다 갱신하고, 사이 프레임은 스크롤 오프셋만 보정해 블릿.
+        if (nightTex) {
+          nightFrame++;
+          if (nightFrame % 3 === 1 || nightCache.bandW === 0) {
+            const termX = w * (0.3 + 0.05 * Math.sin(elapsed * 0.01));
+            const soft = w * 0.16;
+            nightCache.bandW = Math.min(nightBand.width, Math.ceil(termX + soft));
+            nightCache.bandH = Math.min(nightBand.height, Math.ceil(dh));
+            nightCache.off = off;
+            nightBandCtx.clearRect(0, 0, nightBand.width, nightBand.height);
+            for (let dx = -off; dx < nightCache.bandW + dw; dx += dw) {
+              nightBandCtx.drawImage(
+                nightTex,
+                0,
+                sy,
+                nightTex.width,
+                sh,
+                dx,
+                0,
+                dw + 1,
+                dh,
+              );
+            }
+            nightBandCtx.globalCompositeOperation = "destination-in";
+            const mask = nightBandCtx.createLinearGradient(
+              termX - soft,
+              0,
+              termX + soft,
+              0,
+            );
+            mask.addColorStop(0, "rgba(0,0,0,0.93)");
+            mask.addColorStop(1, "rgba(0,0,0,0)");
+            nightBandCtx.fillStyle = mask;
+            nightBandCtx.fillRect(0, 0, nightCache.bandW, nightCache.bandH);
+            nightBandCtx.globalCompositeOperation = "source-over";
+          }
+          // 텍스처는 계속 흐르므로 캐시와의 오프셋 차이만큼 왼쪽으로 밀어 그린다
+          const shift = off - nightCache.off;
+          ctx.drawImage(
+            nightBand,
+            0,
+            0,
+            nightCache.bandW,
+            nightCache.bandH,
+            -shift,
+            horizonY - 6,
+            nightCache.bandW,
+            nightCache.bandH,
+          );
+        }
       } else {
         const og = ctx.createLinearGradient(0, horizonY, 0, h);
         og.addColorStop(0, "#2e6ea8");
@@ -764,22 +1114,17 @@ export default function PlayGame() {
         ctx.fillStyle = og;
         ctx.fillRect(0, horizonY - 6, w, h - horizonY + 20);
       }
-      // 대기 안쪽 림
+      // 수평선 안쪽으로 잦아드는 산란광(림) — 클립 안이라 곡률을 따라간다
       const rim = ctx.createLinearGradient(0, horizonY - 8, 0, horizonY + 46);
-      rim.addColorStop(0, "rgba(190,235,255,0.55)");
+      rim.addColorStop(0, "rgba(190,235,255,0.5)");
       rim.addColorStop(1, "rgba(190,235,255,0)");
       ctx.fillStyle = rim;
       ctx.fillRect(0, horizonY - 8, w, 54);
       ctx.restore();
-      // 대기 글로우(바깥)
-      const glow = ctx.createRadialGradient(ecx, ecy, R * 0.995, ecx, ecy, R * 1.02);
-      glow.addColorStop(0, "rgba(120,210,255,0.45)");
-      glow.addColorStop(1, "rgba(120,210,255,0)");
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(ecx, ecy, R * 1.03, 0, Math.PI * 2);
-      ctx.arc(ecx, ecy, R * 0.99, 0, Math.PI * 2, true);
-      ctx.fill();
+      // 3겹 대기(바이올렛 헤일로→블루→시안 림) — 지구 곡률을 그대로 감싼다
+      drawAtmosphereRings(ctx, ecx, ecy, R, sunX, yAt(sunX));
+      // 오로라 커튼 — 수평선 위에서 서서히 명멸
+      if (!lowFx) drawAurora(ctx, w, yAt, elapsed);
 
       // 엔티티
       for (const e of ents) {
@@ -831,12 +1176,24 @@ export default function PlayGame() {
         }
       }
 
-      // 줍스
+      // 스피드라인(부스트)
+      if (speedLines.length) {
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (const sl of speedLines) {
+          ctx.moveTo(sl.x, sl.y);
+          ctx.lineTo(sl.x + sl.len, sl.y);
+        }
+        ctx.stroke();
+      }
+
+      // 줍스 — 스쿼시&스트레치로 탱글탱글하게
       ctx.save();
       ctx.translate(jp.x, jp.y);
       ctx.rotate(Math.max(-0.3, Math.min(0.3, jp.vy * 0.0012)));
       const pulse = 1 + eatPulse * 0.16;
-      ctx.scale(pulse, pulse);
+      ctx.scale(pulse * squash.sx, pulse * squash.sy);
       if (invulnT > 0) ctx.globalAlpha = 0.45 + Math.sin(elapsed * 24) * 0.3;
       // 추진 불꽃
       const flameL = (boostT > 0 ? 30 : 14) + Math.sin(elapsed * 22) * 5;
@@ -851,6 +1208,17 @@ export default function PlayGame() {
       ctx.fill();
       if (joopsImg.complete) ctx.drawImage(joopsImg, -34, -37, 68, 74);
       ctx.restore();
+
+      // 링 펄스(섭취·콤보·조우)
+      for (const rg of rings) {
+        ctx.globalAlpha = Math.max(0, rg.life / rg.max);
+        ctx.strokeStyle = rg.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(rg.x, rg.y, rg.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
 
       // 파티클/텍스트
       for (const p of parts) {
@@ -868,21 +1236,43 @@ export default function PlayGame() {
       }
       ctx.globalAlpha = 1;
       for (const t of texts) {
+        ctx.save();
         ctx.globalAlpha = Math.max(0, t.life / t.max);
+        ctx.translate(t.x, t.y);
+        ctx.rotate(t.rot);
         ctx.font = `bold ${t.size}px sans-serif`;
         ctx.textAlign = "center";
         ctx.lineWidth = 3;
         ctx.strokeStyle = "rgba(10,10,30,0.8)";
-        ctx.strokeText(t.text, t.x, t.y);
+        ctx.strokeText(t.text, 0, 0);
         ctx.fillStyle = t.color;
-        ctx.fillText(t.text, t.x, t.y);
+        ctx.fillText(t.text, 0, 0);
+        ctx.restore();
       }
       ctx.globalAlpha = 1;
-      // 피격 플래시
-      if (flashT > 0) {
-        ctx.fillStyle = `rgba(255,60,60,${flashT * 0.18})`;
-        ctx.fillRect(-20, -20, w + 40, h + 40);
+      // 피격·저체력 연출 — 화면 가장자리 붉은 비네트(심박 펄스)
+      const lowHp = hp > 0 && hp <= 25;
+      const hurtA =
+        flashT * 0.3 + (lowHp ? 0.1 + 0.08 * Math.sin(elapsed * 4.2) : 0);
+      if (hurtA > 0.015) {
+        const hg = ctx.createRadialGradient(
+          w / 2,
+          h / 2,
+          Math.min(w, h) * 0.35,
+          w / 2,
+          h / 2,
+          Math.max(w, h) * 0.72,
+        );
+        hg.addColorStop(0, "rgba(255,60,60,0)");
+        hg.addColorStop(1, `rgba(255,60,60,${Math.min(0.45, hurtA)})`);
+        ctx.fillStyle = hg;
+        ctx.fillRect(-30, -30, w + 60, h + 60);
       }
+
+      // 시네마 후처리: 렌즈 플레어 → 비네트 → 필름 그레인
+      drawLensFlare(ctx, sunX, sunY, w, h, elapsed);
+      if (vignetteTex) ctx.drawImage(vignetteTex, 0, 0);
+      if (!lowFx) drawGrain(ctx, grainTex, w, h, elapsed, !reduceMotion);
 
       // HUD 동기화(200ms)
       hudT -= dt;
@@ -895,6 +1285,7 @@ export default function PlayGame() {
           combo,
           mult,
           boost: boostMeter,
+          dim: elapsed - lastEventT > 4,
         });
       }
     };
@@ -941,73 +1332,121 @@ export default function PlayGame() {
     <div ref={wrapRef} className="relative h-dvh touch-none overflow-hidden bg-[#03030d]">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
-      {/* HUD */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 p-3">
+      {/* HUD — 프로스트 글래스, 4초 무이벤트 시 자동 딤. 노치·다이내믹 아일랜드를 피하도록
+          safe-area-inset을 반영(가로 모드에서도 좌우가 잘리지 않는다) */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 p-3"
+        style={{
+          paddingTop: "max(0.75rem, env(safe-area-inset-top))",
+          paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
+          paddingRight: "max(0.75rem, env(safe-area-inset-right))",
+        }}
+      >
         <button
           onClick={() => {
             finishRef.current?.();
           }}
-          className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+          className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg text-white backdrop-blur-md transition active:scale-95"
           aria-label="비행 종료"
         >
           ←
         </button>
-        <div className="flex-1">
-          <div className="mx-auto max-w-[240px]">
-            <div className="h-3 overflow-hidden rounded-full border border-white/20 bg-black/40">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-300 transition-[width]"
-                style={{ width: `${hud?.hp ?? 100}%` }}
-              />
+        <div
+          className={`flex-1 transition-opacity duration-700 ${
+            hud?.dim ? "opacity-55" : "opacity-100"
+          }`}
+        >
+          <div className="mx-auto max-w-[262px] rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 backdrop-blur-md">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px]" aria-hidden>
+                ❤️
+              </span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-300 transition-[width]"
+                  style={{ width: `${hud?.hp ?? 100}%` }}
+                />
+              </div>
+              <span className="text-[10px] tabular-nums text-white/80">
+                {Math.round(hud?.hp ?? 100)}
+              </span>
             </div>
-            <div className="mt-1 text-center text-[10px] text-white/70">
-              ❤️ {Math.round(hud?.hp ?? 100)} · 🧹 {hud?.cleaned ?? 0}개 · ⭐{" "}
-              {hud?.xp ?? 0} XP
+            <div className="mt-1 flex items-center justify-center gap-2 text-[10px] text-white/75">
+              <span>🧹 {hud?.cleaned ?? 0}개</span>
+              <span className="text-white/25">·</span>
+              <span>⭐ {hud?.xp ?? 0} XP</span>
               {hud && hud.mult > 1 && (
-                <span className="ml-1 rounded bg-teal-300/25 px-1 text-teal-200">
+                <span className="rounded-full border border-teal-300/40 bg-teal-300/15 px-1.5 font-semibold text-teal-200">
                   📡 ×2
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="w-11" />
+        {fs.supported ? (
+          <button
+            onClick={fs.toggle}
+            className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white backdrop-blur-md transition active:scale-95"
+            aria-label={fs.active ? "전체화면 종료" : "전체화면"}
+          >
+            <FullscreenIcon active={fs.active} />
+          </button>
+        ) : (
+          <div className="w-11 shrink-0" />
+        )}
       </div>
 
-      {/* 콤보 */}
+      {/* 콤보 — 갱신될 때마다 팝 */}
       {hud && hud.combo >= 2 && (
-        <div className="pointer-events-none absolute left-1/2 top-16 z-10 -translate-x-1/2 text-center">
-          <span className="text-lg font-black text-pink-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+        <div
+          key={hud.combo}
+          className="pointer-events-none absolute left-1/2 top-16 z-10 animate-[comboPop4_0.35s_ease-out_both]"
+        >
+          <span className="text-xl font-black text-pink-300 [text-shadow:0_0_16px_rgba(255,159,178,0.6),0_1px_4px_rgba(0,0,0,0.85)]">
             콤보 ×{hud.combo}
           </span>
         </div>
       )}
+      <style>{`@keyframes comboPop4{0%{transform:translateX(-50%) scale(1.7);opacity:0.15}100%{transform:translateX(-50%) scale(1);opacity:1}}`}</style>
 
-      {/* 부스트 버튼 (요구 3: 먹은 쓰레기 = 추진력) */}
+      {/* 부스트 버튼 — 코닉 링 게이지 (요구 3: 먹은 쓰레기 = 추진력) */}
       <button
         onClick={() => {
           boostReqRef.current = true;
         }}
-        className="absolute bottom-5 right-4 z-10 flex h-16 w-16 flex-col items-center justify-center rounded-full border border-teal-300/50 bg-black/50 text-white backdrop-blur active:scale-95"
+        className="absolute z-10 h-[68px] w-[68px] rounded-full p-[3px] transition active:scale-95"
+        style={{
+          background: `conic-gradient(#7ef2d8 ${(hud?.boost ?? 0) * 3.6}deg, rgba(255,255,255,0.10) 0deg)`,
+          bottom: "max(1.25rem, env(safe-area-inset-bottom))",
+          right: "max(1rem, env(safe-area-inset-right))",
+        }}
         aria-label="부스트"
       >
-        <span className="text-xl">🚀</span>
-        <span className="text-[9px] tabular-nums text-teal-200">
-          {Math.round(hud?.boost ?? 0)}%
+        <span
+          className={`flex h-full w-full flex-col items-center justify-center rounded-full border border-white/10 bg-[#0a1020]/85 text-white backdrop-blur-md ${
+            (hud?.boost ?? 0) >= 30
+              ? "shadow-[0_0_18px_rgba(126,242,216,0.45)]"
+              : ""
+          }`}
+        >
+          <span className="text-xl">🚀</span>
+          <span className="text-[9px] tabular-nums text-teal-200">
+            {Math.round(hud?.boost ?? 0)}%
+          </span>
         </span>
       </button>
 
-      {/* 조작 힌트 */}
+      {/* 조작 힌트 — 부스트 버튼과 겹치지 않게 위로 */}
       {phase === "playing" && hud && hud.cleaned === 0 && (
-        <p className="pointer-events-none absolute bottom-6 left-0 right-0 z-10 animate-pulse text-center text-xs text-white/70">
+        <p className="pointer-events-none absolute bottom-28 left-1/2 z-10 w-max max-w-[86vw] -translate-x-1/2 animate-pulse rounded-full border border-white/10 bg-black/45 px-4 py-2 text-center text-[11px] text-white/85 backdrop-blur-md">
           드래그로 줍스를 조종해요 — 빨간 점선은 아직 못 먹는 위험물!
         </p>
       )}
 
       {/* 종료 모달 */}
       {phase === "ended" && result && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#0c0b22] p-6 text-center text-white">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#0c0b22]/90 p-6 text-center text-white backdrop-blur-xl">
             <div className="text-4xl">{result.hpDelta < 0 && (hud?.hp ?? 1) <= 0 ? "😵" : "🛰️"}</div>
             <h2 className="mt-2 text-lg font-bold">
               {(hud?.hp ?? 1) <= 0 ? "줍스가 지쳤어요…" : "비행 종료!"}
