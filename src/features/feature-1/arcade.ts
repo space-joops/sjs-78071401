@@ -4,6 +4,14 @@
 
 import { DEBRIS_TIERS, type StageDef } from "./constants";
 import { drawJoops, type JoopsMood } from "./joopsSprite";
+import {
+  CAPSULE_FRAMES,
+  DEBRIS_GRIDS,
+  drawSprite,
+  HEART,
+  ORBIT_DASH,
+  SAT_FRAMES,
+} from "./pixel/sprites";
 import type { JoopsStore } from "./store";
 
 export type ArcadeToast = { text: string; tone: "good" | "bad" | "info" };
@@ -24,13 +32,11 @@ type Debris = {
   y: number;
   vx: number;
   vy: number;
-  rot: number;
-  vr: number;
   r: number;
   seed: number;
 };
 
-type Satellite = { x: number; y: number; vx: number; tilt: number };
+type Satellite = { x: number; y: number; vx: number };
 type Friend = { x: number; y: number; vx: number; baseY: number; amp: number; phase: number; met: boolean };
 type Capsule = { x: number; y: number; vx: number; phase: number };
 
@@ -72,6 +78,7 @@ export class Arcade {
   private nextThrustPuffAt = 0;
   private lastSatToastAt = 0;
   private invulnUntil = 0;
+  private chompUntil = 0;
   private shake = 0;
 
   constructor(
@@ -173,12 +180,12 @@ export class Arcade {
       }
       d.x += d.vx * dt;
       d.y += d.vy * dt;
-      d.rot += d.vr * dt;
 
       const hitDist = d.r + size * 0.85;
       if (!info.exhausted && Math.hypot(j.x - d.x, j.y - d.y) < hitDist) {
         if (edible) {
           const gained = this.store.eatDebris(d.tier);
+          this.chompUntil = now + 240; // 꿀꺽 — 깨물기 프레임 + 몸 팽창 팝
           this.burstEat(d.x, d.y, info.commActive);
           this.texts.push({
             x: d.x,
@@ -330,8 +337,6 @@ export class Arcade {
       y: rand(this.H * 0.05, this.H * 0.75),
       vx: -rand(52, 120) - info.stageIndex * 9,
       vy: rand(-14, 14),
-      rot: rand(0, Math.PI * 2),
-      vr: rand(-1.6, 1.6),
       r: def.radius,
       seed: Math.random() * 9,
     });
@@ -343,7 +348,6 @@ export class Arcade {
       x: fromLeft ? -100 : this.W + 100,
       y: rand(this.H * 0.08, this.H * 0.55),
       vx: (fromLeft ? 1 : -1) * rand(70, 115),
-      tilt: rand(-0.25, 0.25),
     });
   }
 
@@ -417,15 +421,20 @@ export class Arcade {
       ctx.translate(rand(-this.shake, this.shake), rand(-this.shake, this.shake));
     }
 
-    // 우주 먼지 스트릭
-    ctx.strokeStyle = "rgba(190,215,255,0.12)";
-    ctx.lineWidth = 1;
+    // 우주 먼지 스트릭 (칩힌 픽셀 라인)
+    ctx.fillStyle = "rgba(190,215,255,0.13)";
     for (const d of this.dust) {
-      ctx.beginPath();
-      ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x + d.len, d.y);
-      ctx.stroke();
+      ctx.fillRect(d.x, d.y, d.len, 2);
     }
+
+    // 레트로 궤도 점선 — 줍스의 순항 고도를 지나는 HUD 라인
+    const dashTile = 32;
+    const dashOff = (now * 0.045) % dashTile;
+    ctx.globalAlpha = 0.32;
+    for (let tx = -dashTile; tx < this.W + dashTile; tx += dashTile) {
+      drawSprite(ctx, ORBIT_DASH, tx - dashOff, this.H * 0.4 - 16, 2);
+    }
+    ctx.globalAlpha = 1;
 
     for (const d of this.debris) this.drawDebris(ctx, d, d.tier <= info.stage.maxTier, now);
     for (const s of this.sats) this.drawSatellite(ctx, s, now);
@@ -451,13 +460,23 @@ export class Arcade {
     const mood: JoopsMood = info.exhausted ? "hurt" : info.energy < 25 ? "tired" : "happy";
     const blink = now < this.invulnUntil ? 0.55 + 0.45 * Math.sin(now / 55) : 1;
     const moving = Math.hypot(j.tx - j.x, j.ty - j.y) > 9;
-    drawJoops(ctx, j.x, j.y + Math.sin(now / 620) * 3, info.stage.size, info.stageIndex, now, {
-      mood,
-      dirX: j.dirX,
-      dirY: j.dirY,
-      thrust: moving && !info.exhausted,
-      alpha: blink,
-    });
+    const gulp = Math.max(0, (this.chompUntil - now) / 240); // 꿀꺽 팽창 팝
+    drawJoops(
+      ctx,
+      j.x,
+      j.y + Math.sin(now / 620) * 3,
+      info.stage.size * (1 + 0.16 * gulp),
+      info.stageIndex,
+      now,
+      {
+        mood,
+        dirX: j.dirX,
+        dirY: j.dirY,
+        thrust: moving && !info.exhausted,
+        chomp: gulp > 0,
+        alpha: blink,
+      },
+    );
 
     // 파티클
     for (const p of this.parts) {
@@ -465,26 +484,24 @@ export class Arcade {
       if (p.kind === "spark") {
         ctx.globalAlpha = q;
         ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * q + 0.4, 0, Math.PI * 2);
-        ctx.fill();
+        const s = Math.max(1.5, p.size * (0.6 + q));
+        ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
       } else if (p.kind === "puff") {
         ctx.globalAlpha = q * 0.5;
         ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (1.6 - q * 0.6), 0, Math.PI * 2);
-        ctx.fill();
+        const s = p.size * (1.8 - q * 0.6);
+        ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
       } else if (p.kind === "ring") {
         ctx.globalAlpha = q;
         ctx.strokeStyle = p.color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size + (1 - q) * 34, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.lineWidth = 3;
+        const rr = p.size + (1 - q) * 34;
+        ctx.strokeRect(p.x - rr, p.y - rr, rr * 2, rr * 2);
       } else {
-        // heart
+        // heart — 픽셀 하트 스프라이트 (F 인덱스를 파티클 색으로 리맵)
         ctx.globalAlpha = Math.min(1, q * 1.4);
-        this.drawHeart(ctx, p.x, p.y, p.size, p.color);
+        const hs = p.size / 9;
+        drawSprite(ctx, HEART, p.x - 6.5 * hs, p.y - 7.5 * hs, hs, { 7: p.color });
       }
     }
     ctx.globalAlpha = 1;
@@ -507,194 +524,48 @@ export class Arcade {
   }
 
   private drawDebris(ctx: CanvasRenderingContext2D, d: Debris, edible: boolean, now: number): void {
-    ctx.save();
-    ctx.translate(d.x, d.y);
+    const scale = 0.9 + d.r / 7;
+    const bob = Math.sin(now / 420 + d.seed) * 2;
+    drawSprite(ctx, DEBRIS_GRIDS[d.tier - 1], d.x - 8 * scale, d.y - 8 * scale + bob, scale);
 
-    // 처리 가능 여부 링
-    ctx.beginPath();
-    ctx.arc(0, 0, d.r + 5, 0, Math.PI * 2);
-    if (edible) {
-      ctx.strokeStyle = "rgba(125,232,216,0.35)";
-      ctx.setLineDash([]);
-    } else {
-      ctx.strokeStyle = `rgba(255,110,110,${0.3 + 0.18 * Math.sin(now / 250 + d.seed)})`;
-      ctx.setLineDash([4, 4]);
-    }
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.rotate(d.rot);
-    if (d.tier === 1) {
-      // 페인트 조각 — 작은 파편 무리
-      ctx.fillStyle = "#cdd8e6";
-      ctx.beginPath();
-      ctx.arc(0, 0, d.r * 0.55, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#9fb0c4";
-      ctx.beginPath();
-      ctx.arc(d.r * 0.6, d.r * 0.3, d.r * 0.3, 0, Math.PI * 2);
-      ctx.arc(-d.r * 0.5, -d.r * 0.4, d.r * 0.26, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (d.tier === 2) {
-      // 볼트·너트 — 육각형
-      ctx.fillStyle = "#aab8ca";
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
-        const px = Math.cos(a) * d.r;
-        const py = Math.sin(a) * d.r;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
+    // 처리 가능 여부 — 레트로 타겟 코너 틱
+    const half = d.r + 6;
+    const t = Math.max(2, Math.round(scale));
+    const arm = t * 2;
+    ctx.fillStyle = edible
+      ? "rgba(125,232,216,0.4)"
+      : `rgba(255,110,110,${0.35 + 0.3 * Math.sin(now / 220 + d.seed)})`;
+    for (const sx of [-1, 1] as const) {
+      for (const sy of [-1, 1] as const) {
+        const cx = d.x + sx * half;
+        const cy = d.y + bob + sy * half;
+        ctx.fillRect(sx > 0 ? cx - arm : cx, cy - t / 2, arm, t);
+        ctx.fillRect(cx - t / 2, sy > 0 ? cy - arm : cy, t, arm);
       }
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#5d6b7d";
-      ctx.beginPath();
-      ctx.arc(0, 0, d.r * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (d.tier === 3) {
-      // 태양전지판 파편
-      ctx.fillStyle = "#3d6fb4";
-      ctx.fillRect(-d.r, -d.r * 0.62, d.r * 2, d.r * 1.24);
-      ctx.strokeStyle = "rgba(190,220,255,0.55)";
-      ctx.lineWidth = 1;
-      for (let gx = -d.r; gx <= d.r; gx += d.r * 0.5) {
-        ctx.beginPath();
-        ctx.moveTo(gx, -d.r * 0.62);
-        ctx.lineTo(gx, d.r * 0.62);
-        ctx.stroke();
-      }
-      ctx.beginPath();
-      ctx.moveTo(-d.r, 0);
-      ctx.lineTo(d.r, 0);
-      ctx.stroke();
-    } else if (d.tier === 4) {
-      // 로켓 잔해 — 노즐
-      ctx.fillStyle = "#cfc0a2";
-      ctx.beginPath();
-      ctx.moveTo(-d.r * 0.9, -d.r * 0.5);
-      ctx.lineTo(d.r * 0.35, -d.r * 0.95);
-      ctx.lineTo(d.r * 0.35, d.r * 0.95);
-      ctx.lineTo(-d.r * 0.9, d.r * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#8d8065";
-      ctx.beginPath();
-      ctx.ellipse(d.r * 0.38, 0, d.r * 0.22, d.r * 0.95, 0, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // 폐위성
-      ctx.fillStyle = "#77839a";
-      ctx.fillRect(-d.r * 0.5, -d.r * 0.42, d.r, d.r * 0.84);
-      ctx.fillStyle = "#2f4b78";
-      ctx.fillRect(-d.r * 1.15, -d.r * 0.2, d.r * 0.6, d.r * 0.4);
-      ctx.save();
-      ctx.translate(d.r * 0.5, 0);
-      ctx.rotate(0.5);
-      ctx.fillRect(0, -d.r * 0.18, d.r * 0.62, d.r * 0.36);
-      ctx.restore();
-      ctx.strokeStyle = "#aab6c8";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(0, -d.r * 0.42);
-      ctx.lineTo(0, -d.r * 0.85);
-      ctx.stroke();
     }
-    ctx.restore();
   }
 
   private drawSatellite(ctx: CanvasRenderingContext2D, s: Satellite, now: number): void {
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(s.tilt);
-    // 태양전지판
-    ctx.fillStyle = "#2c5b9e";
-    ctx.fillRect(-46, -7, 30, 14);
-    ctx.fillRect(16, -7, 30, 14);
-    ctx.strokeStyle = "rgba(180,215,255,0.5)";
-    ctx.lineWidth = 1;
-    for (const gx of [-40, -32, -24, 22, 30, 38]) {
-      ctx.beginPath();
-      ctx.moveTo(gx, -7);
-      ctx.lineTo(gx, 7);
-      ctx.stroke();
+    const lightOn = Math.floor(now / 260) % 2 === 0;
+    const frame = lightOn ? SAT_FRAMES[0] : SAT_FRAMES[1];
+    drawSprite(ctx, frame, s.x - 21, s.y - 19, 3);
+    if (lightOn) {
+      // 경고등 잔광 (칩힌 사각 글로우)
+      ctx.fillStyle = "rgba(255,80,80,0.18)";
+      ctx.fillRect(s.x - 8, s.y + 3, 14, 14);
     }
-    // 본체 (금박)
-    ctx.fillStyle = "#d8b45a";
-    ctx.fillRect(-14, -11, 28, 22);
-    ctx.fillStyle = "#b3903f";
-    ctx.fillRect(-14, -11, 28, 5);
-    // 안테나 접시
-    ctx.fillStyle = "#e8eef6";
-    ctx.beginPath();
-    ctx.arc(0, -16, 6, Math.PI, 0);
-    ctx.fill();
-    // 경고 점멸등
-    const blink = 0.5 + 0.5 * Math.sin(now / 180);
-    ctx.fillStyle = `rgba(255,80,80,${0.35 + 0.6 * blink})`;
-    ctx.beginPath();
-    ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
-    ctx.fill();
-    const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, 14);
-    glow.addColorStop(0, `rgba(255,90,90,${0.3 * blink})`);
-    glow.addColorStop(1, "rgba(255,90,90,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(0, 0, 14, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
   }
 
   private drawCapsule(ctx: CanvasRenderingContext2D, c: Capsule, now: number): void {
-    ctx.save();
-    ctx.translate(c.x, c.y + Math.sin(now / 420 + c.phase) * 5);
-    const pulse = 0.6 + 0.4 * Math.sin(now / 300);
-    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 26);
-    glow.addColorStop(0, `rgba(130,215,255,${0.5 * pulse})`);
-    glow.addColorStop(1, "rgba(130,215,255,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(0, 0, 26, 0, Math.PI * 2);
-    ctx.fill();
-    // 지구 모양 코어
-    const core = ctx.createRadialGradient(-3, -3, 1, 0, 0, 11);
-    core.addColorStop(0, "#bfe8ff");
-    core.addColorStop(0.5, "#4da3e8");
-    core.addColorStop(1, "#1c4f8f");
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.arc(0, 0, 11, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(220,245,255,0.8)";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.arc(0, 0, 11, 0, Math.PI * 2);
-    ctx.moveTo(-11, 0);
-    ctx.lineTo(11, 0);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 5, 11, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.rotate(now / 900);
-    ctx.strokeStyle = `rgba(160,225,255,${0.7 * pulse})`;
-    ctx.setLineDash([5, 7]);
-    ctx.beginPath();
-    ctx.arc(0, 0, 17, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  private drawHeart(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string): void {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(s / 14, s / 14);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(0, 4);
-    ctx.bezierCurveTo(-7, -3, -4.5, -9, 0, -4.5);
-    ctx.bezierCurveTo(4.5, -9, 7, -3, 0, 4);
-    ctx.fill();
-    ctx.restore();
+    const bobY = c.y + Math.sin(now / 420 + c.phase) * 5;
+    const pulse = 0.5 + 0.5 * Math.sin(now / 300);
+    ctx.globalAlpha = 0.35 + 0.4 * pulse;
+    ctx.strokeStyle = "#7fd4ff";
+    ctx.lineWidth = 2;
+    const rr = 16 + pulse * 4;
+    ctx.strokeRect(c.x - rr, bobY - rr, rr * 2, rr * 2);
+    ctx.globalAlpha = 1;
+    const frame = CAPSULE_FRAMES[Math.floor(now / 320) % 2];
+    drawSprite(ctx, frame, c.x - 15, bobY - 15, 2);
   }
 }

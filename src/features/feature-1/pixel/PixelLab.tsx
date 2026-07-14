@@ -5,12 +5,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { STAGES } from "../constants";
+import { FRIEND_REMAP, STAGE_REMAPS } from "../joopsSprite";
 import { AI_PROMPTS } from "./prompts";
 import {
   drawSprite,
   DEBRIS_BOLT,
   FLAME_FRAMES,
   JOOPS_CHOMP,
+  JOOPS_IDLE,
   JOOPS_OPEN,
   ORBIT_DASH,
   PALETTE,
@@ -18,6 +21,7 @@ import {
   SEGMENT_BULGE,
   SPRITES,
   STARS_FRAMES,
+  type PaletteRemap,
   type PixelGrid,
 } from "./sprites";
 
@@ -61,6 +65,30 @@ export default function PixelLab() {
                   <p className="text-center text-[11px] font-semibold text-white/75">{s.label}</p>
                 </div>
               ))}
+            </div>
+          </Section>
+
+          {/* 진화 팔레트 */}
+          <Section
+            title="진화 팔레트 스왑"
+            desc="줍스 오비탈의 5단계 진화는 같은 도트에 팔레트만 갈아 끼워 표현합니다 (+떠돌이 줍스)."
+          >
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {STAGE_REMAPS.map((remap, i) => (
+                <div
+                  key={STAGES[i].name}
+                  className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-[#0a1526]/80 p-2"
+                >
+                  <SpriteView frames={[JOOPS_IDLE]} fps={1} scale={4} remap={remap} />
+                  <p className="text-center text-[10px] font-semibold text-white/70">
+                    {STAGES[i].name}
+                  </p>
+                </div>
+              ))}
+              <div className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-[#0a1526]/80 p-2">
+                <SpriteView frames={[JOOPS_IDLE]} fps={1} scale={4} remap={FRIEND_REMAP} />
+                <p className="text-center text-[10px] font-semibold text-white/70">떠돌이 줍스</p>
+              </div>
             </div>
           </Section>
 
@@ -123,10 +151,12 @@ function SpriteView({
   frames,
   fps,
   scale,
+  remap,
 }: {
   frames: PixelGrid[];
   fps: number;
   scale: number;
+  remap?: PaletteRemap;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const size = 16 * scale;
@@ -145,7 +175,7 @@ function SpriteView({
     const paint = () => {
       ctx.fillStyle = "#0d1a2e";
       ctx.fillRect(0, 0, size, size);
-      drawSprite(ctx, frames[frame % frames.length], 0, 0, scale);
+      drawSprite(ctx, frames[frame % frames.length], 0, 0, scale, remap);
       frame++;
     };
     paint();
@@ -153,7 +183,7 @@ function SpriteView({
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [frames, fps, scale, size]);
+  }, [frames, fps, scale, size, remap]);
 
   return <canvas ref={ref} style={{ width: size, height: size }} aria-hidden />;
 }
