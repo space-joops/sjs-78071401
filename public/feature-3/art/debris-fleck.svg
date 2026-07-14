@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="우주쓰레기 1등급 — 페인트 조각">
+  <!-- 1등급: 페인트 조각 · 가장 작은 쓰레기 -->
+  <g stroke="#14204A" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 민트 조각 -->
+    <path d="M30 44 L52 36 L46 60 Z" fill="#3DF5C9"/>
+    <!-- 옐로우 조각 -->
+    <rect x="64" y="30" width="18" height="18" rx="6" fill="#FFD977" transform="rotate(18 73 39)"/>
+    <!-- 코랄 조각 -->
+    <circle cx="56" cy="78" r="9" fill="#FF8FA3"/>
+  </g>
+  <!-- 반짝임 -->
+  <path d="M88 64 L90.5 69.5 L96 72 L90.5 74.5 L88 80 L85.5 74.5 L80 72 L85.5 69.5 Z" fill="#FFD977"/>
+  <path d="M26 82 L28 86 L32 88 L28 90 L26 94 L24 90 L20 88 L24 86 Z" fill="#3DF5C9"/>
+  <circle cx="94" cy="38" r="3" fill="#FFFFFF" opacity="0.9"/>
+</svg>
