@@ -251,7 +251,11 @@ export function drawAtmosphereRings(
 
 // ---------- 오로라 ----------
 
-/** 수평선 위에서 명멸하는 초록 커튼 리본 2개 */
+/**
+ * 수평선 위에서 명멸하는 오로라 커튼 2개.
+ * 폴리곤 한 장이 아니라 세로 주름(플리츠) 스트릭 묶음으로 그려
+ * 실제 오로라 커튼처럼 결이 살아 있게 한다.
+ */
 export function drawAurora(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -261,34 +265,27 @@ export function drawAurora(
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (let k = 0; k < 2; k++) {
-    const intensity = (0.35 + 0.65 * Math.max(0, Math.sin(t * 0.11 + k * 2.4))) * 0.17;
-    if (intensity < 0.015) continue;
+    const intensity = (0.35 + 0.65 * Math.max(0, Math.sin(t * 0.11 + k * 2.4))) * 0.2;
+    if (intensity < 0.02) continue;
     const x0 = w * (0.08 + k * 0.5 + 0.06 * Math.sin(t * 0.05 + k * 3));
     const width = w * 0.36;
-    const n = 22;
-    let minTop = Infinity;
-    const pts: { x: number; yb: number; yt: number }[] = [];
-    for (let i = 0; i <= n; i++) {
-      const x = x0 + (i / n) * width;
-      const yb = yAt(x) + 4;
-      // 양끝을 0으로 수렴시키는 엔벨로프 — 사각형이 아닌 커튼 실루엣
-      const env = Math.pow(Math.sin((i / n) * Math.PI), 0.7);
-      const hgt = (52 + 26 * Math.sin(t * 0.8 + x * 0.018 + k * 2)) * env;
-      const yt = yb - Math.max(2, hgt);
-      if (yt < minTop) minTop = yt;
-      pts.push({ x, yb, yt });
-    }
-    const g = ctx.createLinearGradient(0, pts[0].yb, 0, minTop);
-    g.addColorStop(0, `rgba(110,255,180,${intensity})`);
-    g.addColorStop(0.55, `rgba(110,255,190,${intensity * 0.45})`);
-    g.addColorStop(1, "rgba(110,255,190,0)");
+    const S = 9;
+    const cy = yAt(x0 + width / 2) + 4;
+    const maxH = 86;
+    const g = ctx.createLinearGradient(0, cy, 0, cy - maxH);
+    g.addColorStop(0, `rgba(120,255,170,${intensity})`);
+    g.addColorStop(0.45, `rgba(100,240,200,${intensity * 0.5})`);
+    g.addColorStop(1, "rgba(80,220,255,0)");
     ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].yb);
-    for (const p of pts) ctx.lineTo(p.x, p.yb);
-    for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i].x, pts[i].yt);
-    ctx.closePath();
-    ctx.fill();
+    for (let s = 0; s < S; s++) {
+      const px = x0 + ((s + 0.5) / S) * width;
+      const env = Math.pow(Math.sin(((s + 0.5) / S) * Math.PI), 0.7);
+      const hgt = (56 + 28 * Math.sin(t * 0.8 + px * 0.02 + k * 2)) * env;
+      if (hgt < 4) continue;
+      const sw = (width / S) * (0.5 + 0.28 * Math.sin(t * 1.3 + s * 1.7 + k));
+      const yb = yAt(px) + 4;
+      ctx.fillRect(px - sw / 2, yb - hgt, sw, hgt);
+    }
   }
   ctx.restore();
 }
