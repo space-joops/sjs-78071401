@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useFullscreen } from "../hooks/useFullscreen";
 import { useGameState } from "../hooks/useGameState";
 import {
   buildGrain,
@@ -252,6 +253,29 @@ function makeSprite(kind: string, size: number): HTMLCanvasElement {
   return c;
 }
 
+/** 전체화면 진입/종료 아이콘 — 네 모서리 브래킷이 안/밖으로 뒤집힌다 */
+function FullscreenIcon({ active }: { active: boolean }) {
+  const corners = active
+    ? ["9 3 9 9 3 9", "15 3 15 9 21 9", "15 21 15 15 21 15", "9 21 9 15 3 15"]
+    : ["3 9 3 3 9 3", "21 9 21 3 15 3", "21 15 21 21 15 21", "3 15 3 21 9 21"];
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-[18px] w-[18px]"
+      aria-hidden
+    >
+      {corners.map((pts) => (
+        <polyline key={pts} points={pts} />
+      ))}
+    </svg>
+  );
+}
+
 export default function PlayGame() {
   const router = useRouter();
   const { save, ready, mutate } = useGameState();
@@ -266,6 +290,7 @@ export default function PlayGame() {
   const appliedRef = useRef(false);
   const finishRef = useRef<(() => void) | null>(null);
   const boostReqRef = useRef(false);
+  const fs = useFullscreen(wrapRef);
 
   useEffect(() => {
     if (!ready || startedRef.current) return;
@@ -465,6 +490,7 @@ export default function PlayGame() {
 
     // ----- 입력 -----
     let dragging = false;
+    let firstTouch = true;
     const clampTarget = () => {
       jp.tx = Math.max(36, Math.min(w * 0.82, jp.tx));
       jp.ty = Math.max(64, Math.min(horizonY - 36, jp.ty));
@@ -474,6 +500,12 @@ export default function PlayGame() {
       jp.tx = e.offsetX;
       jp.ty = e.offsetY - 60;
       clampTarget();
+      // 첫 터치 제스처에 편승해 전체화면 진입 시도(지원 브라우저만 — iOS Safari는
+      // 임의 요소의 Fullscreen API를 지원하지 않아 여기선 조용히 no-op된다)
+      if (firstTouch && e.pointerType === "touch") {
+        firstTouch = false;
+        fs.enter();
+      }
     };
     const onMove = (e: PointerEvent) => {
       if (!dragging) return;
@@ -1300,13 +1332,21 @@ export default function PlayGame() {
     <div ref={wrapRef} className="relative h-dvh touch-none overflow-hidden bg-[#03030d]">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
-      {/* HUD — 프로스트 글래스, 4초 무이벤트 시 자동 딤 */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 p-3">
+      {/* HUD — 프로스트 글래스, 4초 무이벤트 시 자동 딤. 노치·다이내믹 아일랜드를 피하도록
+          safe-area-inset을 반영(가로 모드에서도 좌우가 잘리지 않는다) */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 p-3"
+        style={{
+          paddingTop: "max(0.75rem, env(safe-area-inset-top))",
+          paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
+          paddingRight: "max(0.75rem, env(safe-area-inset-right))",
+        }}
+      >
         <button
           onClick={() => {
             finishRef.current?.();
           }}
-          className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg text-white backdrop-blur-md transition active:scale-95"
+          className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg text-white backdrop-blur-md transition active:scale-95"
           aria-label="비행 종료"
         >
           ←
@@ -1343,7 +1383,17 @@ export default function PlayGame() {
             </div>
           </div>
         </div>
-        <div className="w-11" />
+        {fs.supported ? (
+          <button
+            onClick={fs.toggle}
+            className="pointer-events-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white backdrop-blur-md transition active:scale-95"
+            aria-label={fs.active ? "전체화면 종료" : "전체화면"}
+          >
+            <FullscreenIcon active={fs.active} />
+          </button>
+        ) : (
+          <div className="w-11 shrink-0" />
+        )}
       </div>
 
       {/* 콤보 — 갱신될 때마다 팝 */}
@@ -1364,9 +1414,11 @@ export default function PlayGame() {
         onClick={() => {
           boostReqRef.current = true;
         }}
-        className="absolute bottom-5 right-4 z-10 h-[68px] w-[68px] rounded-full p-[3px] transition active:scale-95"
+        className="absolute z-10 h-[68px] w-[68px] rounded-full p-[3px] transition active:scale-95"
         style={{
           background: `conic-gradient(#7ef2d8 ${(hud?.boost ?? 0) * 3.6}deg, rgba(255,255,255,0.10) 0deg)`,
+          bottom: "max(1.25rem, env(safe-area-inset-bottom))",
+          right: "max(1rem, env(safe-area-inset-right))",
         }}
         aria-label="부스트"
       >
