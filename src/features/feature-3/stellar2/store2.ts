@@ -8,11 +8,18 @@ import {
   GLOBAL_LINK_MS,
   STORAGE_KEY,
   DEBRIS_TIERS,
+  BRANCHES,
+  BRANCH_LEVEL,
+  HATCH_TAPS,
+  FORGE_TIERS,
+  TECHNO_TIERS,
   levelForXp,
   stageForLevel,
   stageIndexForLevel,
   xpForLevel,
   type StageDef,
+  type BranchId,
+  type BranchDef,
 } from "./balance";
 import {
   groundPointAt,
@@ -41,6 +48,11 @@ export type PersistedState = {
   orbit: OrbitParams;
   home: { lat: number; lon: number; label: string };
   careLog: { feedAt: number; repairAt: number; petAt: number };
+  /** 알 부화 여부 — 부화 전에는 성장·감소·오프라인 진행이 멈춰 있다 */
+  hatched: boolean;
+  hatchTaps: number;
+  /** 진화 분기 (성체 도달 시 결정) */
+  branch: BranchId;
 };
 
 export type AwayReport = {
@@ -72,6 +84,9 @@ export type Snapshot = {
   region: Region;
   comm: CommState;
   globalLinkRemainMs: number;
+  hatched: boolean;
+  branch: BranchId;
+  branchDef: BranchDef | null;
 };
 
 const clamp = (v: number, lo: number, hi: number) =>
@@ -85,6 +100,8 @@ export class Stellar2Store {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private loaded = false;
   awayReport: AwayReport | null = null;
+  /** 분기 진화 알림 — UI가 1회 표시 후 ackBranchNotice() */
+  branchNotice: BranchDef | null = null;
 
   /** 클라이언트에서 1회 호출. 저장분이 있으면 부재 시뮬레이션까지 수행. */
   load(): void {
@@ -95,6 +112,10 @@ export class Stellar2Store {
       if (raw) {
         const parsed = JSON.parse(raw) as PersistedState;
         if (parsed && parsed.version === 1 && parsed.orbit) {
+          // 초기 클론 세이브 호환: 부화/분기 필드 기본값 보강
+          parsed.hatched = parsed.hatched ?? true;
+          parsed.hatchTaps = parsed.hatchTaps ?? HATCH_TAPS;
+          parsed.branch = parsed.branch ?? "none";
           this.st = parsed;
           this.awayReport = this.simulateAway(Date.now());
         }
@@ -129,6 +150,9 @@ export class Stellar2Store {
       orbit: makeOrbitOverHome(home, now),
       home,
       careLog: { feedAt: 0, repairAt: 0, petAt: 0 },
+      hatched: false,
+      hatchTaps: 0,
+      branch: "none",
     };
     this.awayReport = null;
     this.save();
@@ -152,6 +176,24 @@ export class Stellar2Store {
     this.notify();
   }
 
+  ackBranchNotice(): void {
+    this.branchNotice = null;
+    this.notify();
+  }
+
+  /** 알 두드리기 — HATCH_TAPS회 채우면 부화 */
+  tapEgg(): void {
+    if (!this.st || this.st.hatched) return;
+    this.st.hatchTaps += 1;
+    if (this.st.hatchTaps >= HATCH_TAPS) {
+      this.st.hatched = true;
+      this.st.mood = 100;
+      this.st.energy = Math.max(this.st.energy, 80);
+    }
+    this.scheduleSave();
+    this.notify();
+  }
+
   // ---- React 바인딩 ----
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -164,16 +206,17 @@ export class Stellar2Store {
 
   /** 쓰레기 흡수. 실제 획득 XP를 돌려준다 (교신 중 ×2). */
   eatDebris(tier: number): number {
-    if (!this.st) return 0;
+    if (!this.st || !this.st.hatched) return 0;
     const def = DEBRIS_TIERS[tier - 1];
     if (!def) return 0;
     const mult = this.currentComm().active ? 2 : 1;
-    const gained = def.xp * mult;
+    const gained = Math.round(def.xp * mult * this.xpMult());
     this.st.xp += gained;
     this.st.energy = clamp(this.st.energy + def.energy, 0, 100);
     this.st.mood = clamp(this.st.mood + 1, 0, 100);
     this.st.debrisCleaned += 1;
     this.st.cleanedByTier[tier - 1] = (this.st.cleanedByTier[tier - 1] ?? 0) + 1;
+    this.checkBranch();
     this.scheduleSave();
     this.notify();
     return gained;
@@ -181,8 +224,9 @@ export class Stellar2Store {
 
   /** 처리 불가 물체·위성과 충돌 */
   collide(damage: number): void {
-    if (!this.st) return;
-    this.st.health = clamp(this.st.health - damage, 10, 100);
+    if (!this.st || !this.st.hatched) return;
+    const mult = this.st.branch !== "none" ? BRANCHES[this.st.branch].collideMult : 1;
+    this.st.health = clamp(this.st.health - Math.round(damage * mult), 10, 100);
     this.st.mood = clamp(this.st.mood - 6, 0, 100);
     this.st.collisions += 1;
     this.scheduleSave();
@@ -191,12 +235,13 @@ export class Stellar2Store {
 
   /** 다른 줍스와 조우 */
   encounter(): number {
-    if (!this.st) return 0;
+    if (!this.st || !this.st.hatched) return 0;
     const mult = this.currentComm().active ? 2 : 1;
-    const gained = 25 * mult;
+    const gained = Math.round(25 * mult * this.xpMult());
     this.st.xp += gained;
     this.st.mood = clamp(this.st.mood + 12, 0, 100);
     this.st.encounters += 1;
+    this.checkBranch();
     this.scheduleSave();
     this.notify();
     return gained;
@@ -234,6 +279,7 @@ export class Stellar2Store {
       log.petAt = now;
     }
     this.st.xp += def.xp;
+    this.checkBranch();
     this.scheduleSave();
     this.notify();
     return { ok: true };
@@ -259,8 +305,31 @@ export class Stellar2Store {
   }
 
   /** 1초마다: 완만한 상태 변화 + 스냅샷 갱신 */
+  private xpMult(): number {
+    if (!this.st || this.st.branch === "none") return 1;
+    return BRANCHES[this.st.branch].xpMult;
+  }
+
+  /** 성체(BRANCH_LEVEL) 도달 시 먹은 쓰레기 재질 비율로 진화 분기 */
+  private checkBranch(): void {
+    const st = this.st;
+    if (!st || st.branch !== "none" || !st.hatched) return;
+    if (levelForXp(st.xp) < BRANCH_LEVEL) return;
+    const sum = (tiers: number[]) =>
+      tiers.reduce((acc, t) => acc + (st.cleanedByTier[t - 1] ?? 0), 0);
+    const branch = sum(FORGE_TIERS) >= sum(TECHNO_TIERS) ? "forge" : "techno";
+    st.branch = branch;
+    this.branchNotice = BRANCHES[branch];
+  }
+
   private tick(): void {
     if (!this.st) return;
+    if (!this.st.hatched) {
+      // 알은 시간이 흘러도 지치지 않는다
+      this.st.lastSimAt = Date.now();
+      this.notify();
+      return;
+    }
     const dtH = 1 / 3600;
     this.st.energy = clamp(this.st.energy - 4 * dtH, 5, 100);
     this.st.mood = clamp(this.st.mood - 3 * dtH, 10, 100);
@@ -273,6 +342,10 @@ export class Stellar2Store {
   /** 부재 중 자율 청소 시뮬레이션 */
   private simulateAway(nowMs: number): AwayReport | null {
     if (!this.st) return null;
+    if (!this.st.hatched) {
+      this.st.lastSimAt = nowMs;
+      return null;
+    }
     const awayMs = Math.max(0, nowMs - this.st.lastSimAt);
     this.st.lastSimAt = nowMs;
     if (awayMs < 5 * 60 * 1000) return null; // 5분 미만이면 보고서 생략
@@ -352,6 +425,9 @@ export class Stellar2Store {
       region: regionAt(pos.lat, pos.lon),
       comm: this.currentComm(),
       globalLinkRemainMs: Math.max(0, this.st.globalLinkUntil - now),
+      hatched: this.st.hatched,
+      branch: this.st.branch,
+      branchDef: this.st.branch !== "none" ? BRANCHES[this.st.branch] : null,
     };
   }
 

@@ -24,7 +24,7 @@ const FRIEND_COLORS: { body: string; hilite: string }[] = [
   { body: "#C9A6FF", hilite: "#E6D9FF" },
 ];
 
-const DEBRIS_FILES = [
+export const DEBRIS_FILES = [
   "debris-fleck.svg",
   "debris-screw.svg",
   "debris-panel.svg",
@@ -32,7 +32,7 @@ const DEBRIS_FILES = [
   "debris-satellite.svg",
 ];
 
-function mixWithWhite(hex: string, t: number): string {
+export function mixWithWhite(hex: string, t: number): string {
   const n = parseInt(hex.slice(1), 16);
   const ch = (v: number) => Math.round(v * (1 - t) + 255 * t);
   const r = ch((n >> 16) & 255);
@@ -41,7 +41,7 @@ function mixWithWhite(hex: string, t: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
-function makeVariant(
+export function makeVariant(
   svgText: string,
   body: string,
   hilite: string,

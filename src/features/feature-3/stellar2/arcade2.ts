@@ -3,8 +3,8 @@
 // 줍스 조종, 쓰레기 흡수, 위성 충돌, 다른 줍스 조우, 아이템을 담당하고
 // 점수/체력 반영은 hooks를 통해 스토어에 위임한다.
 
-import { DEBRIS_TIERS } from "./balance";
-import { loadSprites, type Sprites } from "../sprites";
+import { DEBRIS_TIERS, type BranchId } from "./balance";
+import { loadSprites2, type Sprites2 } from "./sprites2";
 
 export type ArcadeHooks = {
   /** 쓰레기 흡수 → 실제 획득 XP 반환 */
@@ -24,6 +24,11 @@ export type ArcadeHooks = {
   getEnergy: () => number;
   getMood: () => number;
   isComm: () => boolean;
+  /** 알 부화 여부 — false면 알 모드(두드려 깨우기)로 동작 */
+  isHatched: () => boolean;
+  getEggTaps: () => number;
+  onEggTap: () => void;
+  getBranch: () => BranchId;
 };
 
 type Debris = {
@@ -74,7 +79,7 @@ export class ArcadeEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private hooks: ArcadeHooks;
-  private sprites: Sprites;
+  private sprites: Sprites2;
   private raf = 0;
   private running = false;
   private lastT = 0;
@@ -109,6 +114,8 @@ export class ArcadeEngine {
   private shake = 0;
   private redFlash = 0;
   private time = 0;
+  /** 부화 연출을 1회만 재생하기 위한 플래그 */
+  private wasHatched = true;
 
   constructor(canvas: HTMLCanvasElement, hooks: ArcadeHooks) {
     this.canvas = canvas;
@@ -116,7 +123,7 @@ export class ArcadeEngine {
     if (!ctx) throw new Error("2D 컨텍스트를 만들 수 없습니다");
     this.ctx = ctx;
     this.hooks = hooks;
-    this.sprites = loadSprites();
+    this.sprites = loadSprites2();
 
     canvas.style.touchAction = "none";
     canvas.addEventListener("pointerdown", this.onDown);
@@ -139,6 +146,7 @@ export class ArcadeEngine {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.wasHatched = this.hooks.isHatched();
     this.lastT = performance.now();
     const loop = (t: number) => {
       if (!this.running) return;
@@ -174,6 +182,18 @@ export class ArcadeEngine {
 
   private onDown = (e: PointerEvent): void => {
     this.canvas.setPointerCapture(e.pointerId);
+    // 알 모드: 알 근처를 탭하면 두드리기
+    if (!this.hooks.isHatched()) {
+      const p = this.toLocal(e);
+      const ex = this.w / 2;
+      const ey = this.h * 0.42;
+      if (Math.hypot(p.x - ex, p.y - ey) < 90) {
+        this.hooks.onEggTap();
+        this.shake = 0.35;
+        this.burst(ex, ey - 20, "#8CFFE3", 6, "spark");
+      }
+      return;
+    }
     this.target = this.toLocal(e);
     const now = performance.now();
     // 더블 탭 → 대시 (한 등급 위 쓰레기도 흡수 가능)
@@ -204,6 +224,25 @@ export class ArcadeEngine {
     const health = this.hooks.getHealth();
     const energy = this.hooks.getEnergy();
     const size = stage.size;
+
+    // 알 모드: 스폰·이동·충돌 없이 이펙트만 갱신
+    if (!this.hooks.isHatched()) {
+      this.shake = Math.max(0, this.shake - dt * 3);
+      this.updateFx(dt);
+      return;
+    }
+    // 부화 순간 연출 (알 → 줍스)
+    if (!this.wasHatched) {
+      this.wasHatched = true;
+      const ex = this.w / 2;
+      const ey = this.h * 0.42;
+      j.x = ex;
+      j.y = ey;
+      j.happyT = 2;
+      this.burst(ex, ey, "#8CFFE3", 18, "spark");
+      this.burst(ex, ey - 20, "#fda4af", 8, "heart");
+      this.floaters.push({ x: ex, y: ey - 70, text: "부화!", color: "#8CFFE3", life: 1.8 });
+    }
 
     // 스폰 타이머
     this.tDebris -= dt;
@@ -400,7 +439,11 @@ export class ArcadeEngine {
       }
     }
 
-    // 파티클 / 플로터
+    this.updateFx(dt);
+  }
+
+  /** 파티클·플로팅 텍스트 갱신 (알 모드에서도 사용) */
+  private updateFx(dt: number): void {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -522,6 +565,20 @@ export class ArcadeEngine {
   private draw(): void {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.w, this.h);
+
+    // 알 모드
+    if (!this.hooks.isHatched()) {
+      ctx.save();
+      if (this.shake > 0) {
+        ctx.translate(rand(-4, 4) * this.shake, rand(-4, 4) * this.shake);
+      }
+      this.drawEgg();
+      this.drawParticles();
+      this.drawFloaters();
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     if (this.shake > 0) {
       ctx.translate(rand(-6, 6) * this.shake, rand(-6, 6) * this.shake);
@@ -549,9 +606,89 @@ export class ArcadeEngine {
     }
   }
 
+  /** 알 그리기: 두드릴 때마다 금이 간다 */
+  private drawEgg(): void {
+    const ctx = this.ctx;
+    const ex = this.w / 2;
+    const ey = this.h * 0.42;
+    const taps = this.hooks.getEggTaps();
+    const wobble =
+      Math.sin(this.time * 2.2) * 0.05 + (this.shake > 0 ? Math.sin(this.time * 42) * 0.09 : 0);
+
+    // 안내 펄스 링
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 2.6);
+    ctx.strokeStyle = `rgba(94,234,212,${0.14 + 0.2 * pulse})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ex, ey, 78 + pulse * 10, 0, TAU);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(ex, ey);
+    ctx.rotate(wobble);
+
+    ctx.shadowColor = "#7de8d8";
+    ctx.shadowBlur = 28;
+    const shell = ctx.createRadialGradient(-14, -20, 8, 0, 6, 62);
+    shell.addColorStop(0, "#ffffff");
+    shell.addColorStop(0.55, "#dcfff5");
+    shell.addColorStop(1, "#9ee8d8");
+    ctx.fillStyle = shell;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 44, 55, 0, 0, TAU);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#14204A";
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    // 점무늬
+    ctx.fillStyle = "rgba(61,245,201,0.55)";
+    ctx.beginPath();
+    ctx.ellipse(-15, -16, 7, 5, -0.4, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(16, -4, 5.5, 4, 0.3, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-5, 24, 4.5, 3.5, 0.1, 0, TAU);
+    ctx.fill();
+
+    // 금 (두드린 횟수만큼)
+    ctx.strokeStyle = "#14204A";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    if (taps >= 1) {
+      ctx.beginPath();
+      ctx.moveTo(-8, -46);
+      ctx.lineTo(-2, -36);
+      ctx.lineTo(-11, -28);
+      ctx.stroke();
+    }
+    if (taps >= 2) {
+      ctx.beginPath();
+      ctx.moveTo(9, -42);
+      ctx.lineTo(15, -30);
+      ctx.lineTo(6, -22);
+      ctx.lineTo(13, -12);
+      ctx.stroke();
+    }
+
+    // 하이라이트
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(0, 0, 40, -2.4, -1.7);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private drawJoops(): void {
     const stage = this.hooks.getStage();
-    const sprite = this.sprites.joopsByStage[stage.index];
+    const branch = this.hooks.getBranch();
+    const sprite =
+      (branch !== "none" ? this.sprites.joopsByBranch[branch] : null) ??
+      this.sprites.joopsByStage[stage.index];
     if (sprite) this.drawJoopsSprite(sprite);
     else this.drawJoopsVector();
   }

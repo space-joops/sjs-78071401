@@ -8,7 +8,7 @@ import { getStellar2Store, type Snapshot } from "./store2";
 import { EarthRenderer } from "../earthRenderer";
 import { ArcadeEngine, type ArcadeHooks } from "./arcade2";
 import { groundPointAt, formatEta } from "../orbit";
-import { CARE, STAGES } from "./balance";
+import { CARE, STAGES, HATCH_TAPS } from "./balance";
 
 type Props = { snap: Snapshot; onOpenTrack: () => void };
 
@@ -75,18 +75,23 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
       getStage: () => {
         const s = store.getSnapshot();
         const stage = s?.stage ?? STAGES[0];
+        const branch = s?.branchDef ?? null;
         return {
           index: s?.stageIndex ?? 0,
           maxTier: stage.maxTier,
           size: stage.size,
-          bodyColor: stage.bodyColor,
-          glowColor: stage.glowColor,
+          bodyColor: branch?.bodyColor ?? stage.bodyColor,
+          glowColor: branch?.glowColor ?? stage.glowColor,
         };
       },
       getHealth: () => store.getSnapshot()?.st.health ?? 100,
       getEnergy: () => store.getSnapshot()?.st.energy ?? 100,
       getMood: () => store.getSnapshot()?.st.mood ?? 100,
       isComm: () => store.getSnapshot()?.comm.active ?? false,
+      isHatched: () => store.getSnapshot()?.st.hatched ?? true,
+      getEggTaps: () => store.getSnapshot()?.st.hatchTaps ?? 0,
+      onEggTap: () => store.tapEgg(),
+      getBranch: () => store.getSnapshot()?.branch ?? "none",
     };
     const engine = new ArcadeEngine(arcadeCanvas, hooks);
 
@@ -184,7 +189,9 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
             <div className="flex items-center gap-1.5 rounded-full bg-black/40 backdrop-blur-sm px-3 py-1.5 border border-white/10">
               <span className="font-bold text-sm">{snap.st.name}</span>
               <span className="text-[10px] text-teal-300">
-                Lv.{snap.level} {snap.stage.name}
+                {snap.st.hatched
+                  ? `Lv.${snap.level} ${snap.branchDef?.name ?? snap.stage.name}`
+                  : "알"}
               </span>
             </div>
           </div>
@@ -225,8 +232,15 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
           </div>
         </div>
 
+        {/* 알 모드 안내 */}
+        {!snap.st.hatched && (
+          <p className="mt-4 text-center text-sm font-semibold text-teal-200">
+            🥚 알을 톡톡 두드려 깨워주세요 ({snap.st.hatchTaps}/{HATCH_TAPS})
+          </p>
+        )}
+
         {/* 조작 팁 */}
-        {showTip && (
+        {showTip && snap.st.hatched && (
           <p className="mt-4 text-center text-xs text-white/55 transition-opacity">
             드래그로 {snap.st.name} 조종 · 더블 탭 대시(진화 필요) ·{" "}
             <b className="text-white/80">등급이 높은 잔해·위성은 피하세요!</b>
@@ -242,8 +256,8 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
 
         <div className="flex-1" />
 
-        {/* 하단: 실적 + 보살핌 */}
-        <div className="px-3 pb-4 flex flex-col gap-2">
+        {/* 하단: 실적 + 보살핌 (부화 후에만) */}
+        <div className={`px-3 pb-4 flex-col gap-2 ${snap.st.hatched ? "flex" : "hidden"}`}>
           <div className="flex justify-between items-end">
             <span className="text-[11px] text-white/50">
               🗑️ {snap.st.debrisCleaned.toLocaleString()}개 청소 · 🤝{" "}
@@ -262,6 +276,30 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
           </div>
         </div>
       </div>
+
+      {/* 진화 분기 알림 */}
+      {store.branchNotice && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 p-6">
+          <div className="w-full max-w-xs rounded-2xl bg-[#0b1220] border border-amber-300/30 p-5 text-center flex flex-col gap-3">
+            <span className="text-4xl" aria-hidden>
+              ✨
+            </span>
+            <h3 className="text-lg font-bold text-amber-300">
+              {store.branchNotice.name}로 진화!
+            </h3>
+            <p className="text-xs text-white/60 leading-relaxed">
+              {store.branchNotice.desc}
+            </p>
+            <button
+              type="button"
+              onClick={() => store.ackBranchNotice()}
+              className="h-11 rounded-xl bg-teal-400 text-black font-bold active:scale-[0.98] transition-transform"
+            >
+              멋져!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

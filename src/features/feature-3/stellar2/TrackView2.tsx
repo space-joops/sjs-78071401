@@ -284,7 +284,7 @@ export default function TrackView({ snap, onBack }: Props) {
             <p className="mt-0.5 text-[11px] text-white/50">
               {glMs > 0
                 ? `글로벌 링크 ${Math.ceil(glMs / 60000)}분 남음`
-                : `${snap.stage.name} · 진화하면 넓어져요`}
+                : `${snap.branchDef?.name ?? snap.stage.name} · 진화하면 넓어져요`}
             </p>
           </div>
           <div className="rounded-2xl bg-white/[.05] p-3.5">

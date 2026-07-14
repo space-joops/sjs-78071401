@@ -24,7 +24,7 @@ export type StageDef = {
 export const STAGES: StageDef[] = [
   {
     minLevel: 1,
-    name: "유생 줍스",
+    name: "새끼 줍스",
     maxTier: 2,
     rangeKm: 3000,
     size: 24,
@@ -33,7 +33,7 @@ export const STAGES: StageDef[] = [
   },
   {
     minLevel: 5,
-    name: "새싹 줍스",
+    name: "청소년 줍스",
     maxTier: 3,
     rangeKm: 4500,
     size: 28,
@@ -42,7 +42,7 @@ export const STAGES: StageDef[] = [
   },
   {
     minLevel: 10,
-    name: "청소부 줍스",
+    name: "성체 줍스",
     maxTier: 4,
     rangeKm: 6000,
     size: 33,
@@ -111,6 +111,53 @@ export function stageIndexForLevel(level: number): number {
 
 /** 글로벌 링크 아이템 지속 시간 (ms) */
 export const GLOBAL_LINK_MS = 10 * 60 * 1000;
+
+// ---- 알 부화 ----
+
+/** 부화에 필요한 알 두드리기 횟수 */
+export const HATCH_TAPS = 3;
+
+// ---- 진화 분기 (성체 도달 시, 먹은 쓰레기 재질 비율로 결정) ----
+
+export type BranchId = "none" | "forge" | "techno";
+
+export type BranchDef = {
+  name: string;
+  bodyColor: string;
+  glowColor: string;
+  desc: string;
+  /** 충돌 피해 배율 */
+  collideMult: number;
+  /** 획득 XP 배율 */
+  xpMult: number;
+};
+
+/** 분기가 일어나는 레벨 (성체) */
+export const BRANCH_LEVEL = 10;
+
+export const BRANCHES: Record<Exclude<BranchId, "none">, BranchDef> = {
+  forge: {
+    name: "포지 줍스",
+    bodyColor: "#ffb45e",
+    glowColor: "#ff9838",
+    desc: "볼트·로켓 잔해 같은 금속을 먹고 단련된 화로형 줍스. 충돌 피해 30% 감소.",
+    collideMult: 0.7,
+    xpMult: 1,
+  },
+  techno: {
+    name: "테크노 줍스",
+    bodyColor: "#9f8cff",
+    glowColor: "#7c6cf0",
+    desc: "패널·폐위성 같은 전자 부품을 먹고 각성한 회로형 줍스. 획득 경험치 10% 증가.",
+    collideMult: 1,
+    xpMult: 1.1,
+  },
+};
+
+/** 금속 계열(포지) 판정에 들어가는 쓰레기 등급 */
+export const FORGE_TIERS = [2, 4];
+/** 전자 계열(테크노) 판정에 들어가는 쓰레기 등급 */
+export const TECHNO_TIERS = [3, 5];
 
 export const CARE = {
   feed: { energy: 30, xp: 6, cooldownMs: 60_000, label: "먹이 주기" },

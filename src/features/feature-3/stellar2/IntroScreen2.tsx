@@ -108,10 +108,10 @@ export default function IntroScreen({ onCreate }: Props) {
           onClick={() => onCreate(name, HOME_PRESETS[homeIdx])}
           className="h-14 rounded-2xl bg-teal-400 text-black font-bold text-base active:scale-[0.98] transition-transform"
         >
-          🫧 줍스 입양하기
+          🥚 알 분양받기
         </button>
         <p className="text-center text-[11px] text-white/35 pb-4">
-          입양하면 줍스가 당신의 상공 궤도에 배치됩니다
+          분양받은 알은 당신의 상공 궤도에서 부화를 기다립니다
         </p>
       </div>
     </div>
