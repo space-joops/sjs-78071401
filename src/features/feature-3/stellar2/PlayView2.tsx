@@ -90,6 +90,10 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
         store.pickGlobalItem();
         sfx.item();
       },
+      onShowerStart: () => {
+        store.startShower();
+        sfx.item();
+      },
       getStage: () => {
         const s = store.getSnapshot();
         const stage = s?.stage ?? STAGES[0];
@@ -268,6 +272,11 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
                 {String(Math.floor((glMs % 60000) / 1000)).padStart(2, "0")}
               </span>
             )}
+            {snap.showerRemainMs > 0 && (
+              <span className="rounded-full bg-orange-400/20 border border-orange-300/50 px-3 py-1.5 text-[11px] text-orange-200 font-semibold">
+                ☄️ 소나기 {Math.ceil(snap.showerRemainMs / 1000)}s · XP ×1.5
+              </span>
+            )}
           </div>
         </div>
 
@@ -338,6 +347,34 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
 
       {/* 회피 훈련 미니게임 */}
       {training && <MiniGame onClose={() => setTraining(false)} />}
+
+      {/* 일일 보급 */}
+      {snap.hasDaily && snap.st.hatched && !training && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 p-6">
+          <div className="w-full max-w-xs rounded-2xl bg-[#0b1220] border border-white/10 p-5 text-center flex flex-col gap-3">
+            <span className="text-4xl" aria-hidden>
+              📦
+            </span>
+            <h3 className="text-lg font-bold">일일 보급 도착!</h3>
+            <p className="text-xs text-white/60 leading-relaxed">
+              오늘의 첫 교신 보상이에요
+              <br />
+              에너지 +30 · XP +100 · 글로벌 링크 5분
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                store.claimDaily();
+                sfx.item();
+                showToast("보급 수령 완료! 📦");
+              }}
+              className="h-11 rounded-xl bg-teal-400 text-black font-bold active:scale-[0.98] transition-transform"
+            >
+              보급 받기
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 진화 분기 알림 */}
       {store.branchNotice && (

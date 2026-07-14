@@ -3,7 +3,7 @@
 // 줍스 조종, 쓰레기 흡수, 위성 충돌, 다른 줍스 조우, 아이템을 담당하고
 // 점수/체력 반영은 hooks를 통해 스토어에 위임한다.
 
-import { DEBRIS_TIERS, type BranchId } from "./balance";
+import { DEBRIS_TIERS, SHOWER, type BranchId } from "./balance";
 import { loadSprites2, type Sprites2 } from "./sprites2";
 
 export type ArcadeHooks = {
@@ -13,6 +13,8 @@ export type ArcadeHooks = {
   /** 다른 줍스 조우 → 획득 XP 반환 */
   onEncounter: () => number;
   onGlobalItem: () => void;
+  /** 파편 소나기 시작 시점에 호출 */
+  onShowerStart: () => void;
   getStage: () => {
     index: number;
     maxTier: number;
@@ -111,6 +113,10 @@ export class ArcadeEngine {
   private tSat = 6;
   private tFriend = 12;
   private tItem = 20;
+  /** 다음 파편 소나기까지 남은 시간(초) */
+  private tShower = rand(SHOWER.firstMinGapSec, SHOWER.firstMaxGapSec);
+  /** 진행 중인 소나기의 남은 시간(초) */
+  private showerT = 0;
   private shake = 0;
   private redFlash = 0;
   private time = 0;
@@ -244,6 +250,25 @@ export class ArcadeEngine {
       this.floaters.push({ x: ex, y: ey - 70, text: "부화!", color: "#8CFFE3", life: 1.8 });
     }
 
+    // 파편 소나기: 랜덤 간격으로 한정 시간 대량 스폰
+    if (this.showerT > 0) {
+      this.showerT -= dt;
+    } else {
+      this.tShower -= dt;
+      if (this.tShower <= 0) {
+        this.showerT = SHOWER.durationSec;
+        this.tShower = rand(SHOWER.minGapSec, SHOWER.maxGapSec);
+        this.hooks.onShowerStart();
+        this.floaters.push({
+          x: this.w / 2,
+          y: this.h * 0.3,
+          text: "☄️ 파편 소나기!",
+          color: "#fbbf24",
+          life: 2.2,
+        });
+      }
+    }
+
     // 스폰 타이머
     this.tDebris -= dt;
     this.tSat -= dt;
@@ -251,7 +276,8 @@ export class ArcadeEngine {
     this.tItem -= dt;
     if (this.tDebris <= 0) {
       this.spawnDebris();
-      this.tDebris = rand(0.55, 1.0) * Math.max(0.6, 420 / this.w);
+      const gap = rand(0.55, 1.0) * Math.max(0.6, 420 / this.w);
+      this.tDebris = this.showerT > 0 ? gap / SHOWER.spawnMult : gap;
     }
     if (this.tSat <= 0) {
       this.spawnSatellite();

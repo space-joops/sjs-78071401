@@ -14,6 +14,8 @@ import {
   FORGE_TIERS,
   TECHNO_TIERS,
   TRAIN,
+  SHOWER,
+  DAILY,
   levelForXp,
   stageForLevel,
   stageIndexForLevel,
@@ -59,6 +61,8 @@ export type PersistedState = {
   muted: boolean;
   /** 회피 훈련 통계 */
   training: { bestScore: number; count: number; lastAt: number };
+  /** 일일 보상을 마지막으로 받은 로컬 날짜 (YYYY-M-D) */
+  lastDailyYmd: string;
 };
 
 export type AwayReport = {
@@ -94,10 +98,17 @@ export type Snapshot = {
   branch: BranchId;
   branchDef: BranchDef | null;
   muted: boolean;
+  showerRemainMs: number;
+  hasDaily: boolean;
 };
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
+
+const localYmd = (ms: number): string => {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
 
 export class Stellar2Store {
   private st: PersistedState | null = null;
@@ -109,6 +120,10 @@ export class Stellar2Store {
   awayReport: AwayReport | null = null;
   /** 분기 진화 알림 — UI가 1회 표시 후 ackBranchNotice() */
   branchNotice: BranchDef | null = null;
+  /** 일일 보급 수령 대기 여부 */
+  pendingDaily = false;
+  /** 파편 소나기 종료 시각 (in-memory) */
+  private showerUntil = 0;
 
   /** 클라이언트에서 1회 호출. 저장분이 있으면 부재 시뮬레이션까지 수행. */
   load(): void {
@@ -125,6 +140,7 @@ export class Stellar2Store {
           parsed.branch = parsed.branch ?? "none";
           parsed.muted = parsed.muted ?? false;
           parsed.training = parsed.training ?? { bestScore: 0, count: 0, lastAt: 0 };
+          parsed.lastDailyYmd = parsed.lastDailyYmd ?? "";
           setMuted(parsed.muted);
           this.st = parsed;
           this.awayReport = this.simulateAway(Date.now());
@@ -133,7 +149,10 @@ export class Stellar2Store {
     } catch {
       this.st = null;
     }
-    if (this.st) this.startTicking();
+    if (this.st) {
+      this.startTicking();
+      this.checkDaily();
+    }
     this.notify();
   }
 
@@ -165,6 +184,7 @@ export class Stellar2Store {
       branch: "none",
       muted: false,
       training: { bestScore: 0, count: 0, lastAt: 0 },
+      lastDailyYmd: "",
     };
     setMuted(false);
     this.awayReport = null;
@@ -232,8 +252,40 @@ export class Stellar2Store {
       this.st.hatched = true;
       this.st.mood = 100;
       this.st.energy = Math.max(this.st.energy, 80);
+      this.checkDaily();
     }
     this.scheduleSave();
+    this.notify();
+  }
+
+  /** 날짜가 바뀐 뒤 첫 접속이면 일일 보급 대기 상태로 */
+  private checkDaily(): void {
+    if (!this.st || !this.st.hatched) return;
+    if (localYmd(Date.now()) !== this.st.lastDailyYmd) this.pendingDaily = true;
+  }
+
+  /** 일일 보급 수령 */
+  claimDaily(): { energy: number; xp: number; globalLinkMin: number } | null {
+    if (!this.st || !this.pendingDaily) return null;
+    const now = Date.now();
+    this.st.energy = clamp(this.st.energy + DAILY.energy, 0, 100);
+    this.st.xp += DAILY.xp;
+    this.st.globalLinkUntil = Math.max(this.st.globalLinkUntil, now + DAILY.globalLinkMs);
+    this.st.lastDailyYmd = localYmd(now);
+    this.pendingDaily = false;
+    this.checkBranch();
+    this.scheduleSave();
+    this.notify();
+    return {
+      energy: DAILY.energy,
+      xp: DAILY.xp,
+      globalLinkMin: Math.round(DAILY.globalLinkMs / 60000),
+    };
+  }
+
+  /** 파편 소나기 시작 (아케이드 엔진이 호출) */
+  startShower(): void {
+    this.showerUntil = Date.now() + SHOWER.durationSec * 1000;
     this.notify();
   }
 
@@ -253,7 +305,8 @@ export class Stellar2Store {
     const def = DEBRIS_TIERS[tier - 1];
     if (!def) return 0;
     const mult = this.currentComm().active ? 2 : 1;
-    const gained = Math.round(def.xp * mult * this.xpMult());
+    const showerMult = Date.now() < this.showerUntil ? SHOWER.xpMult : 1;
+    const gained = Math.round(def.xp * mult * this.xpMult() * showerMult);
     this.st.xp += gained;
     this.st.energy = clamp(this.st.energy + def.energy, 0, 100);
     this.st.mood = clamp(this.st.mood + 1, 0, 100);
@@ -472,6 +525,8 @@ export class Stellar2Store {
       branch: this.st.branch,
       branchDef: this.st.branch !== "none" ? BRANCHES[this.st.branch] : null,
       muted: this.st.muted,
+      showerRemainMs: Math.max(0, this.showerUntil - now),
+      hasDaily: this.pendingDaily,
     };
   }
 

@@ -176,6 +176,29 @@ export const TRAIN = {
   sparkChance: 0.3,
 } as const;
 
+// ---- 파편 소나기 이벤트 ----
+
+export const SHOWER = {
+  /** 첫 소나기까지의 간격(초) — 새 세션에서 이벤트를 빨리 보여준다 */
+  firstMinGapSec: 60,
+  firstMaxGapSec: 180,
+  minGapSec: 240,
+  maxGapSec: 480,
+  durationSec: 25,
+  /** 지속 중 스폰 배율 */
+  spawnMult: 4,
+  /** 지속 중 획득 XP 배율 */
+  xpMult: 1.5,
+} as const;
+
+// ---- 일일 첫 접속 보상 ----
+
+export const DAILY = {
+  energy: 30,
+  xp: 100,
+  globalLinkMs: 5 * 60 * 1000,
+} as const;
+
 export const CARE = {
   feed: { energy: 30, xp: 6, cooldownMs: 60_000, label: "먹이 주기" },
   repair: { health: 25, xp: 6, cooldownMs: 120_000, label: "수리하기" },
