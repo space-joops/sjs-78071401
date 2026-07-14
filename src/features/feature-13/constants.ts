@@ -5,8 +5,11 @@ export const STORAGE_KEY = "sjs:feature-13:deeporbit:v1";
 /** 씬 좌표계 — 카메라는 -Z를 바라보고, 쓰레기는 -Z에서 +Z(카메라 쪽)로 다가온다. */
 export const SCENE = {
   fov: 62,
-  near: 0.1,
-  far: 3000,
+  // 가장 가까운 물체가 카메라에서 ~8유닛이라 near를 1로 올릴 수 있다.
+  // 0.1이면 near/far 비가 30,000:1이 되어 모바일 16bit 깊이버퍼에서
+  // 지구와 구름 셸(간격 3.6유닛)이 z-fighting 한다.
+  near: 1,
+  far: 2000,
   /** 카메라 위치 (줍스를 살짝 내려다보는 추격 시점) */
   camPos: [0, 2.2, 9.5] as const,
   camLookAt: [0, 0, -25] as const,
@@ -67,11 +70,13 @@ export type StageDef = {
   color: number;
 };
 
+// 1단계가 maxTier 1이면 스폰의 절반 이상이 즉사 장애물이라 첫 판이 너무 가혹하다.
+// feature-1도 1단계는 2등급까지 흡수한다.
 export const STAGES: StageDef[] = [
-  { minLevel: 1, name: "유생 줍스", maxTier: 1, size: 0.62, color: 0x7de8d8 },
-  { minLevel: 3, name: "새싹 줍스", maxTier: 2, size: 0.72, color: 0x7ee87f },
-  { minLevel: 6, name: "청소부 줍스", maxTier: 3, size: 0.84, color: 0x7fb7ff },
-  { minLevel: 10, name: "수호자 줍스", maxTier: 4, size: 0.96, color: 0xc39bff },
+  { minLevel: 1, name: "유생 줍스", maxTier: 2, size: 0.62, color: 0x7de8d8 },
+  { minLevel: 3, name: "새싹 줍스", maxTier: 3, size: 0.72, color: 0x7ee87f },
+  { minLevel: 6, name: "청소부 줍스", maxTier: 4, size: 0.84, color: 0x7fb7ff },
+  { minLevel: 10, name: "수호자 줍스", maxTier: 5, size: 0.96, color: 0xc39bff },
   { minLevel: 15, name: "별빛 줍스", maxTier: 5, size: 1.1, color: 0xffd97a },
 ];
 
@@ -93,7 +98,9 @@ export const RUN = {
   /** 시작 접근 속도 (u/s) — spawnZ에서 약 4.3초 */
   baseSpeed: 70,
   speedPerLevel: 6,
-  maxSpeed: 150,
+  // 안개가 걷히는 fogNear(90)에서 줍스까지의 반응 시간을 0.75초 이상 확보한다.
+  // 150이면 0.6초라 안개에서 튀어나온 위험물을 피할 수 없다.
+  maxSpeed: 120,
   /** 스폰 간격 (ms) */
   spawnMinMs: 260,
   spawnMaxMs: 620,

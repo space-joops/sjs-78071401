@@ -15,6 +15,12 @@ export type DebrisItem = {
   ring: THREE.Sprite;
   spinX: number;
   spinY: number;
+  /**
+   * 직전 프레임의 z. 스윕 충돌 판정에 쓴다.
+   * 고정 폭 윈도로 판정하면 30fps × 120u/s에서 프레임당 4유닛을 건너뛰어
+   * 작은 쓰레기(결합 반지름 ~1.1)를 그대로 통과해버린다(터널링).
+   */
+  prevZ: number;
 };
 
 export type DebrisField = {
@@ -135,6 +141,7 @@ export function createDebrisField(): DebrisField {
       ring,
       spinX: 0,
       spinY: 0,
+      prevZ: SCENE.spawnZ,
     });
   }
 
@@ -176,6 +183,7 @@ export function createDebrisField(): DebrisField {
         rand(-bounds.y * 1.1, bounds.y * 1.1),
         SCENE.spawnZ + rand(-40, 0),
       );
+      slot.prevZ = slot.mesh.position.z;
       slot.spinX = rand(-1.6, 1.6);
       slot.spinY = rand(-1.6, 1.6);
       slot.mesh.rotation.set(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3));
@@ -189,7 +197,9 @@ export function createDebrisField(): DebrisField {
       for (const it of items) {
         if (!it.alive) continue;
         const m = it.mesh;
+        it.prevZ = m.position.z;
         m.position.z += speed * dt; // 카메라 쪽으로 다가온다
+        // 스핀만 준다 — x/y가 이동하면 스윕 충돌 판정(game.ts)이 깨진다
         m.rotation.x += it.spinX * dt;
         m.rotation.y += it.spinY * dt;
 

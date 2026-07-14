@@ -195,13 +195,19 @@ export function createGame(
     for (const it of debris.items) {
       if (!it.alive) continue;
       const m = it.mesh.position;
-      // 줍스 평면(z=0)을 통과하는 순간만 판정
-      if (m.z < p.z - 2.2 || m.z > p.z + 2.2) continue;
+
+      // 스윕 판정 — 이번 프레임에 쓸고 지나간 z 구간 [prevZ, z] 안에서
+      // 줍스 평면에 가장 가까운 지점을 잡는다. 고정 폭 윈도로 판정하면
+      // 저프레임(30fps)·고속(120u/s)에서 프레임당 4유닛을 건너뛰어
+      // 작은 쓰레기가 줍스를 그대로 통과해버린다(터널링).
+      // 쓰레기는 z로만 움직이고 x/y는 불변이라 이 판정이 정확하다.
+      const zc = Math.min(Math.max(p.z, it.prevZ), m.z);
+      const dz = zc - p.z;
 
       const dx = m.x - p.x;
       const dy = m.y - p.y;
       const hitR = pr + it.def.radius;
-      if (dx * dx + dy * dy > hitR * hitR) continue;
+      if (dx * dx + dy * dy + dz * dz > hitR * hitR) continue;
 
       if (it.tier <= maxTier) {
         // 흡수
