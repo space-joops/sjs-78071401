@@ -86,6 +86,8 @@ type Hud = {
   combo: number;
   mult: number;
   boost: number;
+  /** 최근 4초간 이벤트가 없으면 true — HUD 자동 딤 */
+  dim: boolean;
 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -304,6 +306,7 @@ export default function PlayGame() {
     let flashT = 0;
     let eatPulse = 0;
     // 게임필: 히트스톱·카메라(킥/셰이크/줌)·스쿼시&스트레치·링·스피드라인
+    let lastEventT = 0;
     let hitStopT = 0;
     const cam = { kx: 0, ky: 0, shake: 0, zoom: 1 };
     const squash = { sx: 1, sy: 1 };
@@ -638,6 +641,7 @@ export default function PlayGame() {
       squash.sx = 0.82;
       squash.sy = 1.18;
       if (!reduceMotion) hitStopT = 0.07;
+      lastEventT = elapsed;
       addText(jp.x, jp.y - 40, label, "#ff8f8f", 17);
       if (hp <= 0) finish();
     };
@@ -678,6 +682,7 @@ export default function PlayGame() {
         if (boostT <= 0 && boostMeter >= 30) {
           boostMeter -= 30;
           boostT = 3;
+          lastEventT = elapsed;
           addText(jp.x, jp.y - 50, "부스트! 🚀", "#7ef2d8", 18);
           addRing(jp.x, jp.y, "rgba(126,242,216,0.9)", 10, 260);
         }
@@ -831,6 +836,7 @@ export default function PlayGame() {
             session.satiety += 1.2;
             boostMeter = Math.min(100, boostMeter + 7);
             eatPulse = 1;
+            lastEventT = elapsed;
             // 냠 반응: 스쿼시 + 링 펄스 + 살짝 카메라 킥, 큰 쓰레기는 미세 히트스톱
             squash.sx = 1.2;
             squash.sy = 0.82;
@@ -1247,6 +1253,7 @@ export default function PlayGame() {
           combo,
           mult,
           boost: boostMeter,
+          dim: elapsed - lastEventT > 4,
         });
       }
     };
@@ -1293,30 +1300,43 @@ export default function PlayGame() {
     <div ref={wrapRef} className="relative h-dvh touch-none overflow-hidden bg-[#03030d]">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
-      {/* HUD */}
+      {/* HUD — 프로스트 글래스, 4초 무이벤트 시 자동 딤 */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 p-3">
         <button
           onClick={() => {
             finishRef.current?.();
           }}
-          className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+          className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg text-white backdrop-blur-md transition active:scale-95"
           aria-label="비행 종료"
         >
           ←
         </button>
-        <div className="flex-1">
-          <div className="mx-auto max-w-[240px]">
-            <div className="h-3 overflow-hidden rounded-full border border-white/20 bg-black/40">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-300 transition-[width]"
-                style={{ width: `${hud?.hp ?? 100}%` }}
-              />
+        <div
+          className={`flex-1 transition-opacity duration-700 ${
+            hud?.dim ? "opacity-55" : "opacity-100"
+          }`}
+        >
+          <div className="mx-auto max-w-[262px] rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 backdrop-blur-md">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px]" aria-hidden>
+                ❤️
+              </span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-300 transition-[width]"
+                  style={{ width: `${hud?.hp ?? 100}%` }}
+                />
+              </div>
+              <span className="text-[10px] tabular-nums text-white/80">
+                {Math.round(hud?.hp ?? 100)}
+              </span>
             </div>
-            <div className="mt-1 text-center text-[10px] text-white/70">
-              ❤️ {Math.round(hud?.hp ?? 100)} · 🧹 {hud?.cleaned ?? 0}개 · ⭐{" "}
-              {hud?.xp ?? 0} XP
+            <div className="mt-1 flex items-center justify-center gap-2 text-[10px] text-white/75">
+              <span>🧹 {hud?.cleaned ?? 0}개</span>
+              <span className="text-white/25">·</span>
+              <span>⭐ {hud?.xp ?? 0} XP</span>
               {hud && hud.mult > 1 && (
-                <span className="ml-1 rounded bg-teal-300/25 px-1 text-teal-200">
+                <span className="rounded-full border border-teal-300/40 bg-teal-300/15 px-1.5 font-semibold text-teal-200">
                   📡 ×2
                 </span>
               )}
@@ -1326,40 +1346,55 @@ export default function PlayGame() {
         <div className="w-11" />
       </div>
 
-      {/* 콤보 */}
+      {/* 콤보 — 갱신될 때마다 팝 */}
       {hud && hud.combo >= 2 && (
-        <div className="pointer-events-none absolute left-1/2 top-16 z-10 -translate-x-1/2 text-center">
-          <span className="text-lg font-black text-pink-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+        <div
+          key={hud.combo}
+          className="pointer-events-none absolute left-1/2 top-16 z-10 animate-[comboPop4_0.35s_ease-out_both]"
+        >
+          <span className="text-xl font-black text-pink-300 [text-shadow:0_0_16px_rgba(255,159,178,0.6),0_1px_4px_rgba(0,0,0,0.85)]">
             콤보 ×{hud.combo}
           </span>
         </div>
       )}
+      <style>{`@keyframes comboPop4{0%{transform:translateX(-50%) scale(1.7);opacity:0.15}100%{transform:translateX(-50%) scale(1);opacity:1}}`}</style>
 
-      {/* 부스트 버튼 (요구 3: 먹은 쓰레기 = 추진력) */}
+      {/* 부스트 버튼 — 코닉 링 게이지 (요구 3: 먹은 쓰레기 = 추진력) */}
       <button
         onClick={() => {
           boostReqRef.current = true;
         }}
-        className="absolute bottom-5 right-4 z-10 flex h-16 w-16 flex-col items-center justify-center rounded-full border border-teal-300/50 bg-black/50 text-white backdrop-blur active:scale-95"
+        className="absolute bottom-5 right-4 z-10 h-[68px] w-[68px] rounded-full p-[3px] transition active:scale-95"
+        style={{
+          background: `conic-gradient(#7ef2d8 ${(hud?.boost ?? 0) * 3.6}deg, rgba(255,255,255,0.10) 0deg)`,
+        }}
         aria-label="부스트"
       >
-        <span className="text-xl">🚀</span>
-        <span className="text-[9px] tabular-nums text-teal-200">
-          {Math.round(hud?.boost ?? 0)}%
+        <span
+          className={`flex h-full w-full flex-col items-center justify-center rounded-full border border-white/10 bg-[#0a1020]/85 text-white backdrop-blur-md ${
+            (hud?.boost ?? 0) >= 30
+              ? "shadow-[0_0_18px_rgba(126,242,216,0.45)]"
+              : ""
+          }`}
+        >
+          <span className="text-xl">🚀</span>
+          <span className="text-[9px] tabular-nums text-teal-200">
+            {Math.round(hud?.boost ?? 0)}%
+          </span>
         </span>
       </button>
 
-      {/* 조작 힌트 */}
+      {/* 조작 힌트 — 부스트 버튼과 겹치지 않게 위로 */}
       {phase === "playing" && hud && hud.cleaned === 0 && (
-        <p className="pointer-events-none absolute bottom-6 left-0 right-0 z-10 animate-pulse text-center text-xs text-white/70">
+        <p className="pointer-events-none absolute bottom-28 left-1/2 z-10 w-max max-w-[86vw] -translate-x-1/2 animate-pulse rounded-full border border-white/10 bg-black/45 px-4 py-2 text-center text-[11px] text-white/85 backdrop-blur-md">
           드래그로 줍스를 조종해요 — 빨간 점선은 아직 못 먹는 위험물!
         </p>
       )}
 
       {/* 종료 모달 */}
       {phase === "ended" && result && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#0c0b22] p-6 text-center text-white">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#0c0b22]/90 p-6 text-center text-white backdrop-blur-xl">
             <div className="text-4xl">{result.hpDelta < 0 && (hud?.hp ?? 1) <= 0 ? "😵" : "🛰️"}</div>
             <h2 className="mt-2 text-lg font-bold">
               {(hud?.hp ?? 1) <= 0 ? "줍스가 지쳤어요…" : "비행 종료!"}
