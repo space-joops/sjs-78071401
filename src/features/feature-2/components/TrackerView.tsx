@@ -75,11 +75,11 @@ export default function TrackerView({
       const anim = ts / 1000;
 
       ctx.drawImage(textures.map, 0, 0, TEX_W, TEX_H, 0, 0, w, h);
-      ctx.fillStyle = "rgba(2,8,23,0.3)";
+      ctx.fillStyle = "rgba(24,11,44,0.34)";
       ctx.fillRect(0, 0, w, h);
 
       // 경위선
-      ctx.strokeStyle = "rgba(148,163,184,0.16)";
+      ctx.strokeStyle = "rgba(216,180,254,0.14)";
       ctx.lineWidth = 0.5;
       for (let lon = -150; lon <= 150; lon += 30) {
         ctx.beginPath();
@@ -112,7 +112,7 @@ export default function TrackerView({
       ctx.lineTo(w, darkPoleY);
       ctx.lineTo(0, darkPoleY);
       ctx.closePath();
-      ctx.fillStyle = "rgba(2,6,23,0.42)";
+      ctx.fillStyle = "rgba(15,6,32,0.45)";
       ctx.fill();
 
       // 궤적 폴리라인 (경도 랩에서 분절)
@@ -146,13 +146,13 @@ export default function TrackerView({
       };
       strokeTrack(
         trackPoints(tNow - 45 * 60_000, tNow, 30, save.epochMs),
-        "rgba(103,232,249,0.55)",
+        "rgba(216,180,254,0.65)",
         1.6,
         []
       );
       strokeTrack(
         trackPoints(tNow, tNow + 90 * 60_000, 30, save.epochMs),
-        "rgba(226,232,240,0.5)",
+        "rgba(255,228,246,0.5)",
         1.2,
         [4, 5]
       );
@@ -186,21 +186,21 @@ export default function TrackerView({
       const gx = X(g.lon);
       const gy = Y(g.lat);
       const pulse = (anim % 1.6) / 1.6;
-      ctx.strokeStyle = `rgba(125,211,252,${1 - pulse})`;
+      ctx.strokeStyle = `rgba(249,168,212,${1 - pulse})`;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(gx, gy, 5 + pulse * 14, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = "#e0f2fe";
+      ctx.fillStyle = "#fdf2f8";
       ctx.beginPath();
       ctx.arc(gx, gy, 4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#0ea5e9";
+      ctx.fillStyle = "#ec4899";
       ctx.beginPath();
       ctx.arc(gx, gy, 2.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.font = "11px sans-serif";
-      ctx.fillStyle = "rgba(224,242,254,0.95)";
+      ctx.fillStyle = "rgba(253,242,248,0.95)";
       ctx.fillText("👾", gx, gy - 10);
 
       if (picking) {
@@ -278,47 +278,47 @@ export default function TrackerView({
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-2xl flex-col gap-3 p-3 sm:p-4">
-        <div className="relative overflow-hidden rounded-2xl border border-white/10">
+        <div className="relative overflow-hidden rounded-3xl border border-white/15 shadow-[0_6px_40px_rgba(90,40,130,0.4)]">
           <canvas
             ref={canvasRef}
             onClick={handlePick}
             className={`block aspect-[2/1] w-full ${picking ? "cursor-crosshair" : ""}`}
           />
           {quantum && (
-            <span className="absolute left-2 top-2 rounded-full bg-emerald-500/80 px-2.5 py-1 text-[11px] font-semibold text-white">
+            <span className="absolute left-2 top-2 rounded-full border border-emerald-200/40 bg-emerald-300/40 px-2.5 py-1 text-[11px] font-semibold text-emerald-50 backdrop-blur-md">
               🌐 퀀텀 링크 — 전 지구 교신 중 (
               {formatCountdown(save.quantumUntil - now)} 남음)
             </span>
           )}
           {picking && (
-            <span className="absolute inset-x-0 top-2 mx-auto w-fit rounded-full bg-yellow-400/90 px-3 py-1 text-[11px] font-semibold text-black">
+            <span className="absolute inset-x-0 top-2 mx-auto w-fit rounded-full border border-amber-200/50 bg-amber-200/80 px-3 py-1 text-[11px] font-semibold text-amber-950 backdrop-blur-md">
               지도를 탭해서 주인 위치를 지정하세요
             </span>
           )}
         </div>
 
         {notice && (
-          <p className="rounded-xl bg-emerald-500/15 px-3 py-2 text-center text-xs text-emerald-300">
+          <p className="rounded-2xl border border-emerald-200/25 bg-emerald-300/15 px-3 py-2 text-center text-xs text-emerald-200 backdrop-blur-md">
             {notice}
           </p>
         )}
 
         {/* 다음 교신 카드 */}
         <div
-          className={`rounded-2xl border p-4 ${
+          className={`rounded-3xl border p-4 backdrop-blur-xl ${
             inRange
-              ? "border-emerald-400/40 bg-emerald-500/10"
-              : "border-white/10 bg-white/[.04]"
+              ? "border-emerald-200/30 bg-emerald-300/15"
+              : "border-white/15 bg-white/[.08]"
           }`}
         >
           {inRange ? (
             <div className="flex items-center gap-3">
-              <span className="text-2xl">📡</span>
+              <span className="text-2xl drop-shadow-[0_0_12px_rgba(110,231,183,0.8)]">📡</span>
               <div>
-                <p className="text-sm font-bold text-emerald-300">
+                <p className="text-sm font-bold text-emerald-200">
                   지금 {save.name}와 교신할 수 있어요!
                 </p>
-                <p className="mt-0.5 text-xs text-slate-400">
+                <p className="mt-0.5 text-xs text-pink-100/60">
                   돌봄이 가능하고 플레이 경험치가 2배예요
                 </p>
               </div>
@@ -327,16 +327,16 @@ export default function TrackerView({
             <div className="flex items-center gap-3">
               <span className="text-2xl">🛰️</span>
               <div className="min-w-0">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-pink-100/60">
                   {save.owner.label} 상공 도달까지
                 </p>
-                <p className="text-lg font-bold tabular-nums text-white">
+                <p className="text-lg font-bold tabular-nums text-pink-50">
                   {eta === null ? "48시간 내 없음" : formatCountdown(eta - now)}
                 </p>
               </div>
             </div>
           )}
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 text-[11px] text-purple-200/50">
             교신 반경 {radius.toLocaleString()}km · 레벨이 오르면 넓어져요
             {!quantum && save.quantumCapsules > 0 && (
               <> · 🔮 퀀텀 링크 캡슐로 {QUANTUM_LINK_MINUTES}분간 전 지구 교신 가능</>
@@ -346,19 +346,19 @@ export default function TrackerView({
 
         {/* 현재 상태 카드 */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[.04] p-4">
-            <p className="text-[11px] text-slate-500">현재 상공</p>
-            <p className="mt-1 text-sm font-bold text-white">
+          <div className="rounded-3xl border border-white/15 bg-white/[.08] p-4 backdrop-blur-xl">
+            <p className="text-[11px] text-purple-200/60">현재 상공</p>
+            <p className="mt-1 text-sm font-bold text-pink-50">
               {place.isLand ? "🌍" : "🌊"} {place.name}
             </p>
-            <p className="mt-1 text-[11px] tabular-nums text-slate-400">{formatLatLon(g)}</p>
+            <p className="mt-1 text-[11px] tabular-nums text-pink-100/60">{formatLatLon(g)}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[.04] p-4">
-            <p className="text-[11px] text-slate-500">궤도 정보</p>
-            <p className="mt-1 text-sm font-bold tabular-nums text-white">
+          <div className="rounded-3xl border border-white/15 bg-white/[.08] p-4 backdrop-blur-xl">
+            <p className="text-[11px] text-purple-200/60">궤도 정보</p>
+            <p className="mt-1 text-sm font-bold tabular-nums text-pink-50">
               고도 {ORBIT_ALT_KM}km
             </p>
-            <p className="mt-1 text-[11px] tabular-nums text-slate-400">
+            <p className="mt-1 text-[11px] tabular-nums text-pink-100/60">
               속도 {GROUND_SPEED_KMS}km/s · 경사 {INCLINATION_DEG}° · 주기{" "}
               {Math.round(ORBIT_PERIOD_S / 60)}분
             </p>
@@ -369,23 +369,23 @@ export default function TrackerView({
         <div className="flex gap-2">
           <button
             onClick={useMyLocation}
-            className="h-11 flex-1 rounded-xl border border-white/15 bg-white/[.06] text-xs font-semibold text-slate-200 transition-colors hover:bg-white/[.12]"
+            className="h-11 flex-1 rounded-2xl border border-white/15 bg-white/[.08] text-xs font-semibold text-pink-50 backdrop-blur-xl transition-all duration-300 hover:bg-white/[.14]"
           >
             📍 내 위치로 설정
           </button>
           <button
             onClick={() => setPicking((p) => !p)}
-            className={`h-11 flex-1 rounded-xl border text-xs font-semibold transition-colors ${
+            className={`h-11 flex-1 rounded-2xl border text-xs font-semibold backdrop-blur-xl transition-all duration-300 ${
               picking
-                ? "border-yellow-400/60 bg-yellow-400/20 text-yellow-200"
-                : "border-white/15 bg-white/[.06] text-slate-200 hover:bg-white/[.12]"
+                ? "border-amber-200/50 bg-amber-200/25 text-amber-100"
+                : "border-white/15 bg-white/[.08] text-pink-50 hover:bg-white/[.14]"
             }`}
           >
             🗺️ 지도 탭해서 설정{picking ? " (취소)" : ""}
           </button>
         </div>
 
-        <p className="pb-2 text-center text-[11px] leading-relaxed text-slate-600">
+        <p className="pb-2 text-center text-[11px] leading-relaxed text-purple-200/45">
           줍스는 접속하지 않는 동안에도 이 궤도를 따라 지구를 돌며 청소해요.
           실선은 지나온 길(45분), 점선은 앞으로 갈 길(90분)이에요.
         </p>
