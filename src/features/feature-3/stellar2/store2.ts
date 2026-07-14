@@ -13,6 +13,7 @@ import {
   HATCH_TAPS,
   FORGE_TIERS,
   TECHNO_TIERS,
+  TRAIN,
   levelForXp,
   stageForLevel,
   stageIndexForLevel,
@@ -56,6 +57,8 @@ export type PersistedState = {
   branch: BranchId;
   /** 효과음 음소거 */
   muted: boolean;
+  /** 회피 훈련 통계 */
+  training: { bestScore: number; count: number; lastAt: number };
 };
 
 export type AwayReport = {
@@ -121,6 +124,7 @@ export class Stellar2Store {
           parsed.hatchTaps = parsed.hatchTaps ?? HATCH_TAPS;
           parsed.branch = parsed.branch ?? "none";
           parsed.muted = parsed.muted ?? false;
+          parsed.training = parsed.training ?? { bestScore: 0, count: 0, lastAt: 0 };
           setMuted(parsed.muted);
           this.st = parsed;
           this.awayReport = this.simulateAway(Date.now());
@@ -160,6 +164,7 @@ export class Stellar2Store {
       hatchTaps: 0,
       branch: "none",
       muted: false,
+      training: { bestScore: 0, count: 0, lastAt: 0 },
     };
     setMuted(false);
     this.awayReport = null;
@@ -195,6 +200,28 @@ export class Stellar2Store {
     setMuted(this.st.muted);
     this.scheduleSave();
     this.notify();
+  }
+
+  /** 회피 훈련 결과 반영 — 성적이 스탯·성장에 반영된다 */
+  applyTraining(score: number): { xpGained: number; isBest: boolean } {
+    if (!this.st || !this.st.hatched) return { xpGained: 0, isBest: false };
+    const gained = Math.round(score * TRAIN.xpPerScore * this.xpMult());
+    this.st.xp += gained;
+    this.st.mood = clamp(this.st.mood + TRAIN.moodGain, 0, 100);
+    this.st.energy = clamp(this.st.energy - TRAIN.energyCost, 5, 100);
+    const isBest = score > this.st.training.bestScore;
+    if (isBest) this.st.training.bestScore = score;
+    this.st.training.count += 1;
+    this.st.training.lastAt = Date.now();
+    this.checkBranch();
+    this.scheduleSave();
+    this.notify();
+    return { xpGained: gained, isBest };
+  }
+
+  trainCooldownRemainMs(now: number): number {
+    if (!this.st) return 0;
+    return Math.max(0, TRAIN.cooldownMs - (now - this.st.training.lastAt));
   }
 
   /** 알 두드리기 — HATCH_TAPS회 채우면 부화 */

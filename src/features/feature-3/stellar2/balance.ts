@@ -159,6 +159,23 @@ export const FORGE_TIERS = [2, 4];
 /** 전자 계열(테크노) 판정에 들어가는 쓰레기 등급 */
 export const TECHNO_TIERS = [3, 5];
 
+// ---- 회피 훈련 미니게임 ----
+
+export const TRAIN = {
+  durationSec: 30,
+  cooldownMs: 10 * 60 * 1000,
+  lives: 3,
+  /** 점수 1점당 XP */
+  xpPerScore: 3,
+  moodGain: 15,
+  energyCost: 10,
+  /** 시작 스폰 간격(초) → 시간이 갈수록 minSpawnSec까지 줄어든다 */
+  spawnSec: 0.95,
+  minSpawnSec: 0.45,
+  /** 스파크(보너스) 출현 확률 */
+  sparkChance: 0.3,
+} as const;
+
 export const CARE = {
   feed: { energy: 30, xp: 6, cooldownMs: 60_000, label: "먹이 주기" },
   repair: { health: 25, xp: 6, cooldownMs: 120_000, label: "수리하기" },

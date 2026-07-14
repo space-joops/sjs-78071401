@@ -10,6 +10,7 @@ import { ArcadeEngine, type ArcadeHooks } from "./arcade2";
 import { groundPointAt, formatEta } from "../orbit";
 import { CARE, STAGES, HATCH_TAPS } from "./balance";
 import { sfx } from "./audio";
+import MiniGame from "./MiniGame";
 
 type Props = { snap: Snapshot; onOpenTrack: () => void };
 
@@ -48,6 +49,7 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
   const [glOk, setGlOk] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [showTip, setShowTip] = useState(true);
+  const [training, setTraining] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -310,9 +312,32 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
             {careBtn("feed", "🍬")}
             {careBtn("repair", "🔧")}
             {careBtn("pet", "🤍")}
+            {(() => {
+              const cd = store.trainCooldownRemainMs(snap.now);
+              const disabled = cd > 0;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setTraining(true)}
+                  disabled={disabled}
+                  aria-label="회피 훈련 시작"
+                  className={`pointer-events-auto flex h-12 flex-1 max-w-32 items-center justify-center gap-1.5 rounded-2xl text-sm font-semibold backdrop-blur-sm transition-all active:scale-95 ${
+                    disabled
+                      ? "bg-white/5 text-white/30 border border-white/5"
+                      : "bg-amber-400/20 text-amber-200 border border-amber-300/30"
+                  }`}
+                >
+                  <span aria-hidden>🎯</span>
+                  <span>{disabled ? `${Math.ceil(cd / 60000)}분` : "훈련"}</span>
+                </button>
+              );
+            })()}
           </div>
         </div>
       </div>
+
+      {/* 회피 훈련 미니게임 */}
+      {training && <MiniGame onClose={() => setTraining(false)} />}
 
       {/* 진화 분기 알림 */}
       {store.branchNotice && (
