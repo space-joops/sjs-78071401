@@ -32,9 +32,13 @@ export default function IntroScreen({ onCreate }: Props) {
         </div>
 
         <header className="text-center mt-2">
-          <div className="text-6xl mb-3" aria-hidden>
-            🫧
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/feature-3/art/joops.svg"
+            alt=""
+            aria-hidden
+            className="mx-auto mb-3 h-36 w-36"
+          />
           <h1 className="text-2xl font-bold tracking-tight">줍스 오비탈</h1>
           <p className="mt-1 text-sm text-white/50">궤도의 애완 청소 생명체</p>
         </header>
