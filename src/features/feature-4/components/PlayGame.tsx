@@ -372,6 +372,8 @@ export default function PlayGame() {
       neb2.addColorStop(1, "rgba(40,150,170,0)");
       sctx.fillStyle = neb2;
       sctx.fillRect(0, 0, w, h);
+      // 원경 별은 스크롤이 사실상 0이라 하늘에 함께 굽는다(풀스크린 블릿 2회 절약)
+      if (starsFar) sctx.drawImage(starsFar, 0, 0);
       sctx.drawImage(
         sunSprite,
         sx - sunSprite.width / 2,
@@ -432,8 +434,8 @@ export default function PlayGame() {
       nightBand.height = Math.max(2, Math.ceil(h - horizonY + 96));
       vignetteTex = buildVignette(w, h);
       brightStars = makeBrightStars(w, h);
-      buildStaticSky();
       buildStars();
+      buildStaticSky();
     };
     resize();
     jp.x = w * 0.3;
@@ -594,11 +596,16 @@ export default function PlayGame() {
     finishRef.current = finish;
 
     // ----- 메인 루프 -----
+    let frameAvgMs = 16;
     const loop = (nowMs: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.05, (nowMs - last) / 1000);
+      const rawMs = nowMs - last;
+      const dt = Math.min(0.05, rawMs / 1000);
       last = nowMs;
       elapsed += dt;
+      // 적응형 저사양 모드 — 평균 프레임타임이 45ms를 넘으면 장식 효과 생략
+      frameAvgMs = frameAvgMs * 0.95 + Math.min(120, rawMs) * 0.05;
+      const lowFx = frameAvgMs > 45;
 
       // 교신 배율(부스터/상공) 주기 갱신
       multT -= dt;
@@ -831,12 +838,7 @@ export default function PlayGame() {
           ((((w * 0.18 + 100 - orbitPx * 0.05) % span) + span) % span) - 100;
         ctx.drawImage(moonSprite, mx - 38, h * 0.1 - 38);
       }
-      // 별(패럴랙스)
-      if (starsFar) {
-        const off = (orbitPx * 0.25) % w;
-        ctx.drawImage(starsFar, -off, 0);
-        ctx.drawImage(starsFar, w - off, 0);
-      }
+      // 근경 별(패럴랙스) — 원경 별은 staticSky에 구워져 있다
       if (starsNear) {
         const off = (orbitPx * 0.6) % w;
         ctx.drawImage(starsNear, -off, 0);
@@ -969,7 +971,7 @@ export default function PlayGame() {
       // 3겹 대기(바이올렛 헤일로→블루→시안 림) — 지구 곡률을 그대로 감싼다
       drawAtmosphereRings(ctx, ecx, ecy, R, sunX, yAt(sunX));
       // 오로라 커튼 — 수평선 위에서 서서히 명멸
-      drawAurora(ctx, w, yAt, elapsed);
+      if (!lowFx) drawAurora(ctx, w, yAt, elapsed);
 
       // 엔티티
       for (const e of ents) {
@@ -1077,7 +1079,7 @@ export default function PlayGame() {
       // 시네마 후처리: 렌즈 플레어 → 비네트 → 필름 그레인
       drawLensFlare(ctx, sunX, sunY, w, h, elapsed);
       if (vignetteTex) ctx.drawImage(vignetteTex, 0, 0);
-      drawGrain(ctx, grainTex, w, h, elapsed, !reduceMotion);
+      if (!lowFx) drawGrain(ctx, grainTex, w, h, elapsed, !reduceMotion);
 
       // HUD 동기화(200ms)
       hudT -= dt;
