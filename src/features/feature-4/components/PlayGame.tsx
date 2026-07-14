@@ -5,6 +5,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useGameState } from "../hooks/useGameState";
+import {
+  buildAtmosphereStrip,
+  buildGrain,
+  buildMoonSprite,
+  buildSunSprite,
+  buildVignette,
+  drawAtmosphere,
+  drawAurora,
+  drawBrightStars,
+  drawGrain,
+  drawLensFlare,
+  makeBrightStars,
+  type BrightStar,
+} from "../lib/cinematic";
 import { DEBRIS, FRIEND_NAMES, stageForLevel } from "../lib/constants";
 import {
   buildCloudTexture,
@@ -265,6 +279,8 @@ export default function PlayGame() {
     const stage = stageForLevel(s0.joops.level);
     const maxTier = stage.maxTier;
     const startHp = s0.joops.hp;
+    const reduceMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
     // ----- 세션 상태 -----
     let w = 0;
@@ -286,6 +302,11 @@ export default function PlayGame() {
     let shakeT = 0;
     let flashT = 0;
     let eatPulse = 0;
+    // 하늘 이벤트: 유성 + 위성 행렬(스타링크 오마주)
+    let meteors: { x: number; y: number; vx: number; vy: number; life: number; max: number }[] = [];
+    let meteorT = rand(6, 14);
+    let train: { x: number; y: number; vx: number; n: number } | null = null;
+    let trainT = rand(28, 50);
     let boostMeter = 30;
     let boostT = 0;
     let hp = startHp;
@@ -313,6 +334,14 @@ export default function PlayGame() {
     for (const d of DEBRIS) sprites.set(d.id, makeSprite(d.id, d.radius));
     sprites.set("sat", makeSprite("sat", 20));
     sprites.set("booster", makeSprite("booster", 16));
+
+    // 시네마틱 프리렌더 에셋
+    const sunSprite = buildSunSprite(460);
+    const moonSprite = buildMoonSprite(76);
+    const grainTex = buildGrain(224);
+    let vignetteTex: HTMLCanvasElement | null = null;
+    let atmoStrip: HTMLCanvasElement | null = null;
+    let brightStars: BrightStar[] = [];
 
     let earthTex: HTMLCanvasElement | null = null;
     let nightTex: HTMLCanvasElement | null = null;
@@ -362,6 +391,9 @@ export default function PlayGame() {
       horizonY = h * 0.7;
       nightBand.width = Math.max(2, Math.ceil(w * 0.52));
       nightBand.height = Math.max(2, Math.ceil(h - horizonY + 96));
+      vignetteTex = buildVignette(w, h);
+      atmoStrip = buildAtmosphereStrip(w, 0.84);
+      brightStars = makeBrightStars(w, h);
       buildStars();
     };
     resize();
@@ -586,6 +618,41 @@ export default function PlayGame() {
         boosterT = rand(60, 110);
         spawnBooster();
       }
+      // 하늘 이벤트
+      meteorT -= dt;
+      if (meteorT <= 0) {
+        meteorT = rand(8, 20);
+        meteors.push({
+          x: rand(w * 0.25, w * 1.05),
+          y: rand(0, h * 0.3),
+          vx: -rand(340, 540),
+          vy: rand(130, 230),
+          life: 0.7,
+          max: 0.7,
+        });
+      }
+      meteors = meteors.filter((m) => {
+        m.life -= dt;
+        m.x += m.vx * dt;
+        m.y += m.vy * dt;
+        return m.life > 0;
+      });
+      trainT -= dt;
+      if (trainT <= 0 && !train) {
+        train = {
+          x: w + 30,
+          y: rand(h * 0.08, h * 0.3),
+          vx: -rand(36, 56),
+          n: 4 + Math.floor(Math.random() * 3),
+        };
+      }
+      if (train) {
+        train.x += train.vx * dt;
+        if (train.x < -train.n * 14 - 30) {
+          train = null;
+          trainT = rand(40, 70);
+        }
+      }
 
       comboT -= dt;
       if (comboT <= 0) combo = 0;
@@ -711,24 +778,33 @@ export default function PlayGame() {
           Math.cos(elapsed * 47) * 6 * shakeT,
         );
       }
-      // 우주 배경
+      // 태양 위치 — 우상단 고정, 터미네이터(왼쪽 밤)와 방향 일치
+      const sunX = w * 0.84;
+      const sunY = h * 0.12;
+      // 우주 배경 — 딥 네이비, 틸·오렌지 시네마 그레이딩
       const bg = ctx.createLinearGradient(0, 0, 0, h);
-      bg.addColorStop(0, "#03030d");
-      bg.addColorStop(0.55, "#0a1030");
-      bg.addColorStop(1, "#12305c");
+      bg.addColorStop(0, "#01020a");
+      bg.addColorStop(0.55, "#050d20");
+      bg.addColorStop(1, "#0a1e3c");
       ctx.fillStyle = bg;
       ctx.fillRect(-20, -20, w + 40, h + 40);
-      // 성운
-      const neb = ctx.createRadialGradient(w * 0.8, h * 0.15, 0, w * 0.8, h * 0.15, w * 0.7);
-      neb.addColorStop(0, "rgba(120,80,200,0.14)");
-      neb.addColorStop(1, "rgba(120,80,200,0)");
+      // 성운: 태양 쪽 웜톤 + 반대쪽 틸
+      const neb = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, w * 0.75);
+      neb.addColorStop(0, "rgba(255,180,110,0.10)");
+      neb.addColorStop(1, "rgba(255,180,110,0)");
       ctx.fillStyle = neb;
       ctx.fillRect(0, 0, w, h);
-      const neb2 = ctx.createRadialGradient(w * 0.1, h * 0.4, 0, w * 0.1, h * 0.4, w * 0.6);
-      neb2.addColorStop(0, "rgba(40,150,170,0.12)");
+      const neb2 = ctx.createRadialGradient(w * 0.06, h * 0.45, 0, w * 0.06, h * 0.45, w * 0.6);
+      neb2.addColorStop(0, "rgba(40,150,170,0.11)");
       neb2.addColorStop(1, "rgba(40,150,170,0)");
       ctx.fillStyle = neb2;
       ctx.fillRect(0, 0, w, h);
+      // 달 — 최저속 패럴랙스
+      {
+        const span = w + 200;
+        const mx = ((((w * 0.18 - orbitPx * 0.05) % span) + span) % span) - 100;
+        ctx.drawImage(moonSprite, mx - 38, h * 0.1 - 38);
+      }
       // 별(패럴랙스)
       if (starsFar) {
         const off = (orbitPx * 0.25) % w;
@@ -740,11 +816,46 @@ export default function PlayGame() {
         ctx.drawImage(starsNear, -off, 0);
         ctx.drawImage(starsNear, w - off, 0);
       }
+      // 밝은 별 십자 글린트
+      drawBrightStars(ctx, brightStars, elapsed, orbitPx, w);
+      // 태양 — 신 레이가 아주 천천히 회전
+      ctx.save();
+      ctx.translate(sunX, sunY);
+      ctx.rotate(elapsed * 0.02);
+      ctx.drawImage(sunSprite, -sunSprite.width / 2, -sunSprite.height / 2);
+      ctx.restore();
+      // 유성
+      for (const m of meteors) {
+        const a = Math.max(0, m.life / m.max);
+        const tx = m.x - m.vx * 0.13;
+        const ty = m.y - m.vy * 0.13;
+        const mg = ctx.createLinearGradient(m.x, m.y, tx, ty);
+        mg.addColorStop(0, `rgba(255,255,255,${0.85 * a})`);
+        mg.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.strokeStyle = mg;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+      }
+      // 위성 행렬 — 원경을 일렬로 지나가는 작은 점들
+      if (train) {
+        ctx.fillStyle = "rgba(220,235,255,0.75)";
+        for (let i = 0; i < train.n; i++) {
+          ctx.beginPath();
+          ctx.arc(train.x + i * 14, train.y + i * 1.2, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
 
       // 지구 — 실제 대륙 텍스처가 흐르며 자전/궤도 비행 느낌(요구 6)
       const R = Math.max(w, h) * 1.5;
       const ecx = w / 2;
       const ecy = horizonY + R;
+      // 지구 곡률을 따르는 수평선 y(x) — 대기·오로라가 이 곡선에 붙는다
+      const yAt = (x: number) =>
+        ecy - Math.sqrt(Math.max(0, R * R - (x - ecx) * (x - ecx)));
       ctx.save();
       ctx.beginPath();
       ctx.arc(ecx, ecy, R, 0, Math.PI * 2);
@@ -811,22 +922,11 @@ export default function PlayGame() {
         ctx.fillStyle = og;
         ctx.fillRect(0, horizonY - 6, w, h - horizonY + 20);
       }
-      // 대기 안쪽 림
-      const rim = ctx.createLinearGradient(0, horizonY - 8, 0, horizonY + 46);
-      rim.addColorStop(0, "rgba(190,235,255,0.55)");
-      rim.addColorStop(1, "rgba(190,235,255,0)");
-      ctx.fillStyle = rim;
-      ctx.fillRect(0, horizonY - 8, w, 54);
       ctx.restore();
-      // 대기 글로우(바깥)
-      const glow = ctx.createRadialGradient(ecx, ecy, R * 0.995, ecx, ecy, R * 1.02);
-      glow.addColorStop(0, "rgba(120,210,255,0.45)");
-      glow.addColorStop(1, "rgba(120,210,255,0)");
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(ecx, ecy, R * 1.03, 0, Math.PI * 2);
-      ctx.arc(ecx, ecy, R * 0.99, 0, Math.PI * 2, true);
-      ctx.fill();
+      // 3겹 대기(바이올렛 헤일로→블루→시안 림)가 곡률을 따라 수평선을 감싼다
+      if (atmoStrip) drawAtmosphere(ctx, atmoStrip, w, yAt);
+      // 오로라 커튼 — 수평선 위에서 서서히 명멸
+      drawAurora(ctx, w, yAt, elapsed);
 
       // 엔티티
       for (const e of ents) {
@@ -930,6 +1030,11 @@ export default function PlayGame() {
         ctx.fillStyle = `rgba(255,60,60,${flashT * 0.18})`;
         ctx.fillRect(-20, -20, w + 40, h + 40);
       }
+
+      // 시네마 후처리: 렌즈 플레어 → 비네트 → 필름 그레인
+      drawLensFlare(ctx, sunX, sunY, w, h, elapsed);
+      if (vignetteTex) ctx.drawImage(vignetteTex, 0, 0);
+      drawGrain(ctx, grainTex, w, h, elapsed, !reduceMotion);
 
       // HUD 동기화(200ms)
       hudT -= dt;
