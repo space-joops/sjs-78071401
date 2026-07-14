@@ -235,9 +235,9 @@ export default function JoopsGame() {
 function BackButton() {
   return (
     <Link
-      href="/"
+      href="/features/1"
       className="flex h-11 w-11 items-center justify-center rounded-full text-lg text-white/70 transition-colors hover:bg-white/10"
-      aria-label="메인으로 돌아가기"
+      aria-label="버전 선택으로 돌아가기"
     >
       ←
     </Link>
