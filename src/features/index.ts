@@ -12,8 +12,9 @@ import feature6 from "./feature-6/config";
 import feature7 from "./feature-7/config";
 import feature8 from "./feature-8/config";
 import feature9 from "./feature-9/config";
-// 10 (점프 러너): 조율자 승인 하에 추가된 메뉴 (feature/10-jump-runner)
 import feature10 from "./feature-10/config";
+import feature11 from "./feature-11/config";
+
 
 export type { FeatureConfig };
 
@@ -29,4 +30,6 @@ export const features: FeatureConfig[] = [
   feature8,
   feature9,
   feature10,
+  feature11,
+
 ];
