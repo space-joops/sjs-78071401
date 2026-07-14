@@ -33,6 +33,8 @@ export const PALETTE: readonly string[] = [
   "#c8d4e0", //    14 g  쓰레기 밝은 강철
   "#8a98ac", //    15 e  쓰레기 중간 강철
   "#4a5668", //    16 k  쓰레기 어두운 강철
+  "#cfc0a2", //    17 n  로켓 베이지
+  "#8d8065", //    18 N  로켓 어두운 베이지
 ];
 
 const CHAR_MAP: Record<string, number> = {
@@ -53,6 +55,8 @@ const CHAR_MAP: Record<string, number> = {
   g: 14,
   e: 15,
   k: 16,
+  n: 17,
+  N: 18,
 };
 
 function decode(name: string, art: string[]): PixelGrid {
@@ -117,6 +121,66 @@ export const JOOPS_CHOMP: PixelGrid = decode("JOOPS_CHOMP", [
 
 /** 머리 애니메이션 순서 */
 export const JOOPS_FRAMES: PixelGrid[] = [JOOPS_OPEN, JOOPS_CHOMP];
+
+/** 입 다문 평상시 — 다마고치 초상화·정지 상태용 (배시시 웃는 입) */
+export const JOOPS_IDLE: PixelGrid = decode("JOOPS_IDLE", [
+  "....yy..........",
+  "....yy..........",
+  ".....O..........",
+  "...OOhhhhOO.....",
+  "..OhhhhWWbbO....",
+  ".OhhbbbWObbbO...",
+  ".ObbbbbbbbbbO...",
+  ".ObbbbbbbbbbO...",
+  ".ObbbbbObbObO...",
+  ".OdbbbbbOObbO...",
+  ".OdbbbbbbbbbO...",
+  ".OddbbbbbbbO....",
+  "..OdddbbbbbO....",
+  "...OOddddOO.....",
+  ".....OOOO.......",
+  "................",
+]);
+
+/** 지친 상태 — 반쯤 감긴 눈, 일자 입 */
+export const JOOPS_TIRED: PixelGrid = decode("JOOPS_TIRED", [
+  "....yy..........",
+  "....yy..........",
+  ".....O..........",
+  "...OOhhhhOO.....",
+  "..OhhhhOObbO....",
+  ".OhhbbbWObbbO...",
+  ".ObbbbbbbbbbO...",
+  ".ObbbbbbbbbbO...",
+  ".ObbbbbbbbbbO...",
+  ".OdbbbbOOObbO...",
+  ".OdbbbbbbbbbO...",
+  ".OddbbbbbbbO....",
+  "..OdddbbbbbO....",
+  "...OOddddOO.....",
+  ".....OOOO.......",
+  "................",
+]);
+
+/** 다친 상태 — X자 눈, 꺼진 안테나 전구 */
+export const JOOPS_HURT: PixelGrid = decode("JOOPS_HURT", [
+  "....ss..........",
+  "....ss..........",
+  ".....O..........",
+  "...OOhhhhOO.....",
+  "..OhhhhObObO....",
+  ".OhhbbbbObbbO...",
+  ".ObbbbbObObbO...",
+  ".ObbbbbbbbbbO...",
+  ".ObbbbbbbbbbO...",
+  ".OdbbbbbOObbO...",
+  ".OdbbbbbbbbbO...",
+  ".OddbbbbbbbO....",
+  "..OdddbbbbbO....",
+  "...OOddddOO.....",
+  ".....OOOO.......",
+  "................",
+]);
 
 // ---- 꼬리 불꽃 (머리/꼬리 왼쪽에 겹쳐 그린다. 심은 흰색, 끝은 레드) ----
 
@@ -285,18 +349,215 @@ export const DEBRIS_BOLT: PixelGrid = decode("DEBRIS_BOLT", [
   "................",
 ]);
 
+/** 페인트 조각 (1등급) — 흩어진 작은 파편 */
+export const DEBRIS_PAINT: PixelGrid = decode("DEBRIS_PAINT", [
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "..........e.....",
+  ".......g........",
+  "......geg.......",
+  ".......ee.......",
+  "......k.........",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
+/** 태양전지판 파편 (3등급) — 찢어진 셀 그리드 */
+export const DEBRIS_PANEL: PixelGrid = decode("DEBRIS_PANEL", [
+  "................",
+  "................",
+  "................",
+  "................",
+  "....OOOOOOOO....",
+  "...OlLlLlLlO....",
+  "...OLlLlLlLO....",
+  "....OlLlLlO.....",
+  "....OLlLlO......",
+  ".....OOO........",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
+/** 로켓 잔해 (4등급) — 찌그러진 노즐 */
+export const DEBRIS_ROCKET: PixelGrid = decode("DEBRIS_ROCKET", [
+  "................",
+  "................",
+  "................",
+  "........OOO.....",
+  "......OOnnNO....",
+  "....OOnnnnNO....",
+  "...OnnnnnnNNO...",
+  "...OnnnnnNNNO...",
+  "...OnNNNNNNNO...",
+  "....OONNNNO.....",
+  "......OONO......",
+  "........OOO.....",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
+/** 폐위성 (5등급) — 부러진 안테나와 꺾인 패널 */
+export const DEBRIS_DEADSAT: PixelGrid = decode("DEBRIS_DEADSAT", [
+  "................",
+  "................",
+  "................",
+  ".......O........",
+  ".......O........",
+  "....OOOOOOO.....",
+  "...OggggggeO....",
+  "LlLOggeeggOLlL..",
+  "LlLOgeekkegOLlL.",
+  "...OggeeggeO....",
+  "....OOOOOOO.....",
+  "......OeO.......",
+  ".....O..........",
+  "................",
+  "................",
+  "................",
+]);
+
+/** 등급(tier) 1~5 순서의 쓰레기 그리드 */
+export const DEBRIS_GRIDS: PixelGrid[] = [
+  DEBRIS_PAINT,
+  DEBRIS_BOLT,
+  DEBRIS_PANEL,
+  DEBRIS_ROCKET,
+  DEBRIS_DEADSAT,
+];
+
+/** 운용 위성 (충돌 위험) — 경고등 점멸 2프레임 */
+export const SAT_ON: PixelGrid = decode("SAT_ON", [
+  "................",
+  "................",
+  "................",
+  "......WWW.......",
+  ".......O........",
+  "...OOOOOOO......",
+  "LlLOoooooOLlL...",
+  "LlLONNNNNOLlL...",
+  "...OOOOOOO......",
+  "......F.........",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
+export const SAT_OFF: PixelGrid = decode("SAT_OFF", [
+  "................",
+  "................",
+  "................",
+  "......WWW.......",
+  ".......O........",
+  "...OOOOOOO......",
+  "LlLOoooooOLlL...",
+  "LlLONNNNNOLlL...",
+  "...OOOOOOO......",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
+export const SAT_FRAMES: PixelGrid[] = [SAT_ON, SAT_OFF];
+
+/** 글로벌 링크 코어 — 미니 지구 + 회전 링 2프레임 */
+export const CAPSULE_A: PixelGrid = decode("CAPSULE_A", [
+  "................",
+  "................",
+  "................",
+  "................",
+  "......OOOO......",
+  ".....OcLLlO.....",
+  "....OcLLLllO....",
+  ".c..OLLcLllO..c.",
+  "....OLlLLllO....",
+  "....OlLLlllO....",
+  ".....OllllO.....",
+  "......OOOO......",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
+export const CAPSULE_B: PixelGrid = decode("CAPSULE_B", [
+  "................",
+  "................",
+  "................",
+  "................",
+  "......OOOO......",
+  "..c..OcLLlO.....",
+  "....OcLLLllO....",
+  "....OLLcLllO....",
+  "....OLlLLllO....",
+  "....OlLLlllO..c.",
+  ".....OllllO.....",
+  "......OOOO......",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
+export const CAPSULE_FRAMES: PixelGrid[] = [CAPSULE_A, CAPSULE_B];
+
+/** 하트 이펙트 — 인덱스 7(F)을 remap 하면 원하는 색으로 그려진다 */
+export const HEART: PixelGrid = decode("HEART", [
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "....FF.FF.......",
+  "...FFFFFFF......",
+  "...FFFFFFF......",
+  "....FFFFF.......",
+  ".....FFF........",
+  "......F.........",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+]);
+
 /** 갤러리·외부 소비용 목록 */
 export const SPRITES: { key: string; label: string; frames: PixelGrid[]; fps: number }[] = [
   { key: "joops", label: "줍스 (냠냠 2프레임)", frames: JOOPS_FRAMES, fps: 5 },
+  { key: "moods", label: "표정 (평상·지침·부상)", frames: [JOOPS_IDLE, JOOPS_TIRED, JOOPS_HURT], fps: 2 },
   { key: "flame", label: "꼬리 불꽃 (플리커)", frames: FLAME_FRAMES, fps: 8 },
   { key: "segment", label: "몸통 세그먼트", frames: [SEGMENT], fps: 1 },
   { key: "bulge", label: "꿀꺽 벌지 (+1픽셀)", frames: [SEGMENT_BULGE], fps: 1 },
   { key: "stars", label: "별무리 타일 (트윙클)", frames: STARS_FRAMES, fps: 2 },
   { key: "orbit", label: "궤도 점선 타일", frames: [ORBIT_DASH], fps: 1 },
-  { key: "bolt", label: "우주쓰레기 · 볼트", frames: [DEBRIS_BOLT], fps: 1 },
+  { key: "debris", label: "쓰레기 1~5등급", frames: DEBRIS_GRIDS, fps: 1.5 },
+  { key: "sat", label: "운용 위성 (경고등)", frames: SAT_FRAMES, fps: 3 },
+  { key: "capsule", label: "글로벌 링크 코어", frames: CAPSULE_FRAMES, fps: 3 },
 ];
 
 // ---- Canvas 렌더러 ----
+
+/** 팔레트 인덱스 → 대체 색. 진화 단계·친구 배색 등 팔레트 스왑에 쓴다. */
+export type PaletteRemap = Partial<Record<number, string>>;
 
 /** 그리드를 (x, y)에 scale 배로 그린다. 픽셀 하나 = scale×scale 사각형. */
 export function drawSprite(
@@ -305,24 +566,25 @@ export function drawSprite(
   x: number,
   y: number,
   scale: number,
+  remap?: PaletteRemap,
 ): void {
   for (let row = 0; row < grid.length; row++) {
     const line = grid[row];
     for (let col = 0; col < line.length; col++) {
       const v = line[col];
       if (v === 0) continue;
-      ctx.fillStyle = PALETTE[v];
+      ctx.fillStyle = remap?.[v] ?? PALETTE[v];
       ctx.fillRect(x + col * scale, y + row * scale, scale, scale);
     }
   }
 }
 
 /** 자주 쓰는 스프라이트는 오프스크린 캔버스로 구워서 drawImage 한다. */
-export function bakeSprite(grid: PixelGrid, scale: number): HTMLCanvasElement {
+export function bakeSprite(grid: PixelGrid, scale: number, remap?: PaletteRemap): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = 16 * scale;
   canvas.height = 16 * scale;
   const ctx = canvas.getContext("2d");
-  if (ctx) drawSprite(ctx, grid, 0, 0, scale);
+  if (ctx) drawSprite(ctx, grid, 0, 0, scale, remap);
   return canvas;
 }
