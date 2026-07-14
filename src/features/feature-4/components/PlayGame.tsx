@@ -65,6 +65,8 @@ type Particle = {
   size: number;
   color: string;
   heart?: boolean;
+  /** 지정 시 중심 주위를 도는 궤도 하트(친구 조우 연출) */
+  orbit?: { cx: number; cy: number; ang: number; vang: number; rad: number; vrad: number };
 };
 type FloatText = {
   x: number;
@@ -74,6 +76,7 @@ type FloatText = {
   text: string;
   color: string;
   size: number;
+  rot: number;
 };
 
 type Hud = {
@@ -298,9 +301,22 @@ export default function PlayGame() {
     let combo = 0;
     let comboT = 0;
     let invulnT = 0;
-    let shakeT = 0;
     let flashT = 0;
     let eatPulse = 0;
+    // 게임필: 히트스톱·카메라(킥/셰이크/줌)·스쿼시&스트레치·링·스피드라인
+    let hitStopT = 0;
+    const cam = { kx: 0, ky: 0, shake: 0, zoom: 1 };
+    const squash = { sx: 1, sy: 1 };
+    let rings: {
+      x: number;
+      y: number;
+      r: number;
+      vr: number;
+      life: number;
+      max: number;
+      color: string;
+    }[] = [];
+    let speedLines: { x: number; y: number; len: number; life: number }[] = [];
     // 하늘 이벤트: 유성 + 위성 행렬(스타링크 오마주)
     let meteors: { x: number; y: number; vx: number; vy: number; life: number; max: number }[] = [];
     let meteorT = rand(6, 14);
@@ -561,7 +577,19 @@ export default function PlayGame() {
       }
     };
     const addText = (x: number, y: number, text: string, color: string, size = 15) => {
-      texts.push({ x, y, life: 1.1, max: 1.1, text, color, size });
+      texts.push({
+        x,
+        y,
+        life: 1.1,
+        max: 1.1,
+        text,
+        color,
+        size,
+        rot: rand(-0.14, 0.14),
+      });
+    };
+    const addRing = (x: number, y: number, color: string, r0 = 6, vr = 170) => {
+      rings.push({ x, y, r: r0, vr, life: 0.45, max: 0.45, color });
     };
 
     // ----- 종료 -----
@@ -595,6 +623,25 @@ export default function PlayGame() {
     };
     finishRef.current = finish;
 
+    /** 피격 공통 처리 — 카메라 킥·셰이크·히트스톱·스쿼시 */
+    const applyHit = (dmg: number, hx: number, hy: number, label: string) => {
+      hp = Math.max(0, hp - dmg);
+      invulnT = 1.6;
+      flashT = 1;
+      combo = 0;
+      cam.shake = 1;
+      const dx = jp.x - hx;
+      const dy = jp.y - hy;
+      const d = Math.max(1, Math.hypot(dx, dy));
+      cam.kx += (dx / d) * 9;
+      cam.ky += (dy / d) * 8;
+      squash.sx = 0.82;
+      squash.sy = 1.18;
+      if (!reduceMotion) hitStopT = 0.07;
+      addText(jp.x, jp.y - 40, label, "#ff8f8f", 17);
+      if (hp <= 0) finish();
+    };
+
     // ----- 메인 루프 -----
     let frameAvgMs = 16;
     const loop = (nowMs: number) => {
@@ -622,6 +669,9 @@ export default function PlayGame() {
       }
 
       // --- 업데이트 ---
+      // 히트스톱: 임팩트 순간 세계를 잠깐 멈춘다(렌더는 계속) — udt=0
+      if (hitStopT > 0) hitStopT -= rawMs / 1000;
+      const udt = hitStopT > 0 ? 0 : dt;
       const speedMul = boostT > 0 ? 2.1 : 1;
       if (boostReqRef.current) {
         boostReqRef.current = false;
@@ -629,12 +679,42 @@ export default function PlayGame() {
           boostMeter -= 30;
           boostT = 3;
           addText(jp.x, jp.y - 50, "부스트! 🚀", "#7ef2d8", 18);
+          addRing(jp.x, jp.y, "rgba(126,242,216,0.9)", 10, 260);
         }
       }
-      if (boostT > 0) boostT -= dt;
+      if (boostT > 0) boostT -= udt;
+
+      // 카메라 스프링·감쇠와 스쿼시 복원(실시간 dt — 히트스톱과 무관)
+      cam.kx *= Math.exp(-7 * dt);
+      cam.ky *= Math.exp(-7 * dt);
+      cam.shake *= Math.exp(-4.2 * dt);
+      if (cam.shake < 0.01) cam.shake = 0;
+      const zoomTarget = boostT > 0 ? 1.04 : 1;
+      cam.zoom += (zoomTarget - cam.zoom) * Math.min(1, 6 * dt);
+      squash.sx += (1 - squash.sx) * Math.min(1, 11 * dt);
+      squash.sy += (1 - squash.sy) * Math.min(1, 11 * dt);
+      // 부스트 스피드라인
+      if (boostT > 0 && !reduceMotion) {
+        speedLines.push({
+          x: w + 10,
+          y: rand(40, horizonY),
+          len: rand(40, 110),
+          life: rand(0.25, 0.45),
+        });
+      }
+      speedLines = speedLines.filter((sl) => {
+        sl.life -= dt;
+        sl.x -= 900 * dt;
+        return sl.life > 0 && sl.x + sl.len > -20;
+      });
+      rings = rings.filter((rg) => {
+        rg.life -= dt;
+        rg.r += rg.vr * dt;
+        return rg.life > 0;
+      });
 
       if (keys.size) {
-        const sp = 320 * dt;
+        const sp = 320 * udt;
         if (keys.has("ArrowUp")) jp.ty -= sp;
         if (keys.has("ArrowDown")) jp.ty += sp;
         if (keys.has("ArrowLeft")) jp.tx -= sp;
@@ -642,30 +722,30 @@ export default function PlayGame() {
         clampTarget();
       }
       const prevY = jp.y;
-      jp.x += (jp.tx - jp.x) * Math.min(1, 9 * dt);
-      jp.y += (jp.ty - jp.y) * Math.min(1, 9 * dt);
-      jp.y += Math.sin(elapsed * 2.2) * 8 * dt; // 무중력 부유감
-      jp.vy = (jp.y - prevY) / Math.max(dt, 0.001);
+      jp.x += (jp.tx - jp.x) * Math.min(1, 9 * udt);
+      jp.y += (jp.ty - jp.y) * Math.min(1, 9 * udt);
+      jp.y += Math.sin(elapsed * 2.2) * 8 * udt; // 무중력 부유감
+      jp.vy = udt > 0 ? (jp.y - prevY) / udt : 0;
 
-      orbitPx += 26 * speedMul * dt;
+      orbitPx += 26 * speedMul * udt;
 
-      debrisT -= dt * speedMul;
+      debrisT -= udt * speedMul;
       if (debrisT <= 0) {
         debrisT = rand(0.5, 1.05) * Math.max(0.55, 1 - elapsed / 300);
         spawnDebris();
       }
-      friendT -= dt;
+      friendT -= udt;
       if (friendT <= 0) {
         friendT = rand(24, 42);
         spawnFriend();
       }
-      boosterT -= dt;
+      boosterT -= udt;
       if (boosterT <= 0) {
         boosterT = rand(60, 110);
         spawnBooster();
       }
       // 하늘 이벤트
-      meteorT -= dt;
+      meteorT -= udt;
       if (meteorT <= 0) {
         meteorT = rand(8, 20);
         meteors.push({
@@ -678,12 +758,12 @@ export default function PlayGame() {
         });
       }
       meteors = meteors.filter((m) => {
-        m.life -= dt;
-        m.x += m.vx * dt;
-        m.y += m.vy * dt;
+        m.life -= udt;
+        m.x += m.vx * udt;
+        m.y += m.vy * udt;
         return m.life > 0;
       });
-      trainT -= dt;
+      trainT -= udt;
       if (trainT <= 0 && !train) {
         train = {
           x: w + 30,
@@ -693,26 +773,25 @@ export default function PlayGame() {
         };
       }
       if (train) {
-        train.x += train.vx * dt;
+        train.x += train.vx * udt;
         if (train.x < -train.n * 14 - 30) {
           train = null;
           trainT = rand(40, 70);
         }
       }
 
-      comboT -= dt;
+      comboT -= udt;
       if (comboT <= 0) combo = 0;
-      if (invulnT > 0) invulnT -= dt;
-      if (shakeT > 0) shakeT -= dt * 2.2;
+      if (invulnT > 0) invulnT -= udt;
       if (flashT > 0) flashT -= dt * 2.5;
       if (eatPulse > 0) eatPulse -= dt * 3;
 
       const eatR = 26 * (boostT > 0 ? 1.4 : 1);
       ents = ents.filter((e) => {
-        e.wob += dt;
-        e.x += e.vx * speedMul * dt;
-        e.y += e.vy * dt + Math.sin(e.wob * 1.7) * 12 * dt;
-        e.rot += e.vrot * dt;
+        e.wob += udt;
+        e.x += e.vx * speedMul * udt;
+        e.y += e.vy * udt + Math.sin(e.wob * 1.7) * 12 * udt;
+        e.rot += e.vrot * udt;
         // 부스트 중 자석 효과: 먹을 수 있는 것만 끌어당김
         if (
           boostT > 0 &&
@@ -724,15 +803,15 @@ export default function PlayGame() {
           const dy = jp.y - e.y;
           const d = Math.hypot(dx, dy);
           if (d < 220 && d > 1) {
-            e.x += (dx / d) * 190 * dt;
-            e.y += (dy / d) * 190 * dt;
+            e.x += (dx / d) * 190 * udt;
+            e.y += (dy / d) * 190 * udt;
           }
         }
         if (e.x < -120) return false;
         if (e.kind === "friend" && e.met) {
-          e.metT = (e.metT ?? 0) + dt;
-          e.vx += 60 * dt;
-          e.vy -= 20 * dt;
+          e.metT = (e.metT ?? 0) + udt;
+          e.vx += 60 * udt;
+          e.vy -= 20 * udt;
         }
 
         const d = Math.hypot(e.x - jp.x, e.y - jp.y);
@@ -752,44 +831,67 @@ export default function PlayGame() {
             session.satiety += 1.2;
             boostMeter = Math.min(100, boostMeter + 7);
             eatPulse = 1;
+            // 냠 반응: 스쿼시 + 링 펄스 + 살짝 카메라 킥, 큰 쓰레기는 미세 히트스톱
+            squash.sx = 1.2;
+            squash.sy = 0.82;
+            addRing(e.x, e.y, "rgba(126,242,216,0.8)");
+            cam.kx += (e.x - jp.x) * 0.014;
+            cam.ky += (e.y - jp.y) * 0.014;
+            if (e.type.tier >= 3 && !reduceMotion) hitStopT = 0.035;
             burst(e.x, e.y, ["#7ef2d8", "#ffd95e", "#ffffff"], 10);
             addText(e.x, e.y - 14, `+${Math.round(gained)}`, "#ffd95e");
             if (combo > 0 && combo % 5 === 0) {
               addText(jp.x, jp.y - 56, `콤보 ×${combo}!`, "#ff9fb2", 19);
+              addRing(jp.x, jp.y, "rgba(255,159,178,0.9)", 12, 240);
+              if (combo >= 10) {
+                burst(jp.x, jp.y - 10, ["#ffd95e", "#ffffff"], 12);
+              }
             }
             return false;
           }
           if (!edible && invulnT <= 0 && d < e.r + 24) {
-            hp = Math.max(0, hp - 12);
-            invulnT = 1.6;
-            shakeT = 1;
-            flashT = 1;
-            combo = 0;
             burst(e.x, e.y, ["#ff8f8f", "#ffd0d0"], 8);
-            addText(jp.x, jp.y - 40, "쿵! -12", "#ff8f8f", 17);
-            if (hp <= 0) finish();
+            applyHit(12, e.x, e.y, "쿵! -12");
             return true;
           }
         } else if (e.kind === "sat") {
           if (invulnT <= 0 && d < e.r + 26) {
-            hp = Math.max(0, hp - 15);
-            invulnT = 1.6;
-            shakeT = 1;
-            flashT = 1;
-            combo = 0;
             burst(jp.x, jp.y, ["#ff8f8f", "#ffe2a8"], 10);
-            addText(jp.x, jp.y - 40, "위성 충돌! -15", "#ff8f8f", 17);
-            if (hp <= 0) finish();
+            applyHit(15, e.x, e.y, "위성 충돌! -15");
           }
         } else if (e.kind === "friend" && !e.met) {
           if (d < e.r + 34) {
-            // 친구 줍스 조우(요구 7) — 깜찍한 하트 폭죽
+            // 친구 줍스 조우(요구 7) — 하트 폭죽 + 1초간 도는 궤도 하트
             e.met = true;
             e.metT = 0;
             session.friends += 1;
             const gained = 25 * mult;
             session.xp += gained;
-            burst((e.x + jp.x) / 2, (e.y + jp.y) / 2, ["#ff9fb2", "#ffd95e"], 14, true);
+            const mx = (e.x + jp.x) / 2;
+            const my = (e.y + jp.y) / 2;
+            burst(mx, my, ["#ff9fb2", "#ffd95e"], 8, true);
+            for (let i = 0; i < 6; i++) {
+              parts.push({
+                x: mx,
+                y: my,
+                vx: 0,
+                vy: 0,
+                life: 1.1,
+                max: 1.1,
+                size: 13,
+                color: "#ff9fb2",
+                heart: true,
+                orbit: {
+                  cx: mx,
+                  cy: my,
+                  ang: (i / 6) * Math.PI * 2,
+                  vang: 3.6,
+                  rad: 12,
+                  vrad: 26,
+                },
+              });
+            }
+            addRing(mx, my, "rgba(255,159,178,0.8)", 10, 200);
             addText(e.x, e.y - 44, `${e.name} 만남! +${gained}`, "#ff9fb2", 16);
           }
         } else if (e.kind === "booster") {
@@ -804,24 +906,37 @@ export default function PlayGame() {
       });
 
       parts = parts.filter((p) => {
-        p.life -= dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.vy += (p.heart ? -12 : 60) * dt;
+        p.life -= udt;
+        if (p.orbit) {
+          p.orbit.ang += p.orbit.vang * udt;
+          p.orbit.rad += p.orbit.vrad * udt;
+          p.x = p.orbit.cx + Math.cos(p.orbit.ang) * p.orbit.rad;
+          p.y = p.orbit.cy + Math.sin(p.orbit.ang) * p.orbit.rad * 0.6;
+        } else {
+          p.x += p.vx * udt;
+          p.y += p.vy * udt;
+          p.vy += (p.heart ? -12 : 60) * udt;
+        }
         return p.life > 0;
       });
       texts = texts.filter((t) => {
-        t.life -= dt;
-        t.y -= 34 * dt;
+        t.life -= udt;
+        t.y -= 34 * udt;
         return t.life > 0;
       });
 
       // --- 그리기 ---
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (shakeT > 0) {
+      // 카메라: 저주파 드리프트 + 임팩트 킥 + 지수감쇠 셰이크 + 부스트 줌
+      if (cam.zoom > 1.001) {
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(cam.zoom, cam.zoom);
+        ctx.translate(-w / 2, -h / 2);
+      }
+      if (!reduceMotion) {
         ctx.translate(
-          Math.sin(elapsed * 60) * 7 * shakeT,
-          Math.cos(elapsed * 47) * 6 * shakeT,
+          Math.sin(elapsed * 0.35) * 3 + cam.kx + Math.sin(elapsed * 61) * 8 * cam.shake,
+          Math.cos(elapsed * 0.27) * 2.5 + cam.ky + Math.cos(elapsed * 47) * 7 * cam.shake,
         );
       }
       // 태양 위치 — 우상단 고정, 터미네이터(왼쪽 밤)와 방향 일치
@@ -1023,12 +1138,24 @@ export default function PlayGame() {
         }
       }
 
-      // 줍스
+      // 스피드라인(부스트)
+      if (speedLines.length) {
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (const sl of speedLines) {
+          ctx.moveTo(sl.x, sl.y);
+          ctx.lineTo(sl.x + sl.len, sl.y);
+        }
+        ctx.stroke();
+      }
+
+      // 줍스 — 스쿼시&스트레치로 탱글탱글하게
       ctx.save();
       ctx.translate(jp.x, jp.y);
       ctx.rotate(Math.max(-0.3, Math.min(0.3, jp.vy * 0.0012)));
       const pulse = 1 + eatPulse * 0.16;
-      ctx.scale(pulse, pulse);
+      ctx.scale(pulse * squash.sx, pulse * squash.sy);
       if (invulnT > 0) ctx.globalAlpha = 0.45 + Math.sin(elapsed * 24) * 0.3;
       // 추진 불꽃
       const flameL = (boostT > 0 ? 30 : 14) + Math.sin(elapsed * 22) * 5;
@@ -1043,6 +1170,17 @@ export default function PlayGame() {
       ctx.fill();
       if (joopsImg.complete) ctx.drawImage(joopsImg, -34, -37, 68, 74);
       ctx.restore();
+
+      // 링 펄스(섭취·콤보·조우)
+      for (const rg of rings) {
+        ctx.globalAlpha = Math.max(0, rg.life / rg.max);
+        ctx.strokeStyle = rg.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(rg.x, rg.y, rg.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
 
       // 파티클/텍스트
       for (const p of parts) {
@@ -1060,20 +1198,37 @@ export default function PlayGame() {
       }
       ctx.globalAlpha = 1;
       for (const t of texts) {
+        ctx.save();
         ctx.globalAlpha = Math.max(0, t.life / t.max);
+        ctx.translate(t.x, t.y);
+        ctx.rotate(t.rot);
         ctx.font = `bold ${t.size}px sans-serif`;
         ctx.textAlign = "center";
         ctx.lineWidth = 3;
         ctx.strokeStyle = "rgba(10,10,30,0.8)";
-        ctx.strokeText(t.text, t.x, t.y);
+        ctx.strokeText(t.text, 0, 0);
         ctx.fillStyle = t.color;
-        ctx.fillText(t.text, t.x, t.y);
+        ctx.fillText(t.text, 0, 0);
+        ctx.restore();
       }
       ctx.globalAlpha = 1;
-      // 피격 플래시
-      if (flashT > 0) {
-        ctx.fillStyle = `rgba(255,60,60,${flashT * 0.18})`;
-        ctx.fillRect(-20, -20, w + 40, h + 40);
+      // 피격·저체력 연출 — 화면 가장자리 붉은 비네트(심박 펄스)
+      const lowHp = hp > 0 && hp <= 25;
+      const hurtA =
+        flashT * 0.3 + (lowHp ? 0.1 + 0.08 * Math.sin(elapsed * 4.2) : 0);
+      if (hurtA > 0.015) {
+        const hg = ctx.createRadialGradient(
+          w / 2,
+          h / 2,
+          Math.min(w, h) * 0.35,
+          w / 2,
+          h / 2,
+          Math.max(w, h) * 0.72,
+        );
+        hg.addColorStop(0, "rgba(255,60,60,0)");
+        hg.addColorStop(1, `rgba(255,60,60,${Math.min(0.45, hurtA)})`);
+        ctx.fillStyle = hg;
+        ctx.fillRect(-30, -30, w + 60, h + 60);
       }
 
       // 시네마 후처리: 렌즈 플레어 → 비네트 → 필름 그레인
