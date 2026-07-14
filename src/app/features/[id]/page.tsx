@@ -14,7 +14,7 @@ export default async function FeaturePage({
   }
 
   return (
-    <div className="font-sans min-h-screen flex flex-col items-center justify-center gap-6 p-8">
+    <div className="font-sans min-h-dvh flex flex-col items-center justify-center gap-6 p-4 sm:p-8">
       <h1 className="text-2xl sm:text-3xl font-bold">기능 {featureId}</h1>
       <p className="text-sm text-black/60 dark:text-white/60">
         아직 구현되지 않은 기능입니다.

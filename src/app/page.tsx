@@ -3,7 +3,7 @@ import { features } from "@/features";
 
 export default function Home() {
   return (
-    <div className="font-sans min-h-screen flex flex-col items-center justify-center p-8 sm:p-16">
+    <div className="font-sans min-h-dvh flex flex-col items-center justify-center p-4 sm:p-16">
       <header className="mb-12 text-center">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
           Space Joops
