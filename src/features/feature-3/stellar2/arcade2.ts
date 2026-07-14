@@ -318,6 +318,8 @@ export class ArcadeEngine {
         tx = this.w * 0.3;
         ty = this.h * 0.42 + Math.sin(this.time * 0.9) * 26;
       }
+      // 자율 비행이 상단 HUD·하단 버튼 아래로 파고들지 않게
+      ty = Math.max(150, Math.min(this.h - 110, ty));
     }
     if (tx !== null && ty !== null) {
       const dx = tx - j.x;

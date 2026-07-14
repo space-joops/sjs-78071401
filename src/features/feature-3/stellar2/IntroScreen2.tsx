@@ -90,6 +90,7 @@ export default function IntroScreen({ onCreate }: Props) {
                   key={h.label}
                   type="button"
                   onClick={() => setHomeIdx(i)}
+                  aria-pressed={i === homeIdx}
                   className={`h-11 rounded-xl text-sm transition-colors ${
                     i === homeIdx
                       ? "bg-teal-400/20 border border-teal-300/60 text-teal-200"

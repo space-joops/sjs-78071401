@@ -67,6 +67,8 @@ export type PersistedState = {
   lastDailyYmd: string;
   /** 달성한 업적: id → 달성 시각(ms) */
   achievements: Record<string, number>;
+  /** 온보딩 튜토리얼 완료 여부 */
+  tutorialDone: boolean;
 };
 
 export type AwayReport = {
@@ -148,6 +150,7 @@ export class Stellar2Store {
           parsed.training = parsed.training ?? { bestScore: 0, count: 0, lastAt: 0 };
           parsed.lastDailyYmd = parsed.lastDailyYmd ?? "";
           parsed.achievements = parsed.achievements ?? {};
+          parsed.tutorialDone = parsed.tutorialDone ?? true; // 구버전 세이브는 스킵
           setMuted(parsed.muted);
           this.st = parsed;
           this.awayReport = this.simulateAway(Date.now());
@@ -193,6 +196,7 @@ export class Stellar2Store {
       training: { bestScore: 0, count: 0, lastAt: 0 },
       lastDailyYmd: "",
       achievements: {},
+      tutorialDone: false,
     };
     setMuted(false);
     this.awayReport = null;
@@ -310,6 +314,13 @@ export class Stellar2Store {
 
   ackAchievementNotice(): void {
     this.achievementNotices.shift();
+    this.notify();
+  }
+
+  completeTutorial(): void {
+    if (!this.st) return;
+    this.st.tutorialDone = true;
+    this.scheduleSave();
     this.notify();
   }
 
