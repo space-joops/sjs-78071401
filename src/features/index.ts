@@ -14,7 +14,7 @@ import feature8 from "./feature-8/config";
 import feature9 from "./feature-9/config";
 import feature10 from "./feature-10/config";
 import feature11 from "./feature-11/config";
-
+import feature12 from "./feature-12/config";
 
 export type { FeatureConfig };
 
@@ -31,5 +31,5 @@ export const features: FeatureConfig[] = [
   feature9,
   feature10,
   feature11,
-
+  feature12,
 ];
