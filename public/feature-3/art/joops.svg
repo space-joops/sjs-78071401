@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="줍스 — 헬멧을 쓴 우주 슬라임">
+  <!--
+    Space Joops · 메인 캐릭터 "줍스"
+    스타일: 미니멀 플랫 + 굵고 둥근 외곽선 (#14204A)
+    팔레트: 네온 민트 #3DF5C9 · 파스텔 옐로우 #FFD977 · 코랄 핑크 #FF8FA3 · 아이스 블루 #BFE8FF
+  -->
+
+  <!-- 호기심 반짝이 -->
+  <path d="M28 50 L31.5 57 L38 60 L31.5 63 L28 70 L24.5 63 L18 60 L24.5 57 Z" fill="#FFD977"/>
+  <path d="M208 78 L210.5 83 L215 85.5 L210.5 88 L208 93 L205.5 88 L201 85.5 L205.5 83 Z" fill="#3DF5C9"/>
+  <circle cx="46" cy="196" r="3.5" fill="#FF8FA3"/>
+
+  <!-- ===== 슬라임 몸통 ===== -->
+  <g stroke="#14204A" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 팔 (말랑한 돌기) -->
+    <ellipse cx="62" cy="138" rx="12" ry="15" fill="#3DF5C9" transform="rotate(-16 62 138)"/>
+    <ellipse cx="178" cy="138" rx="12" ry="15" fill="#3DF5C9" transform="rotate(16 178 138)"/>
+
+    <!-- 안테나 -->
+    <path d="M120 66 L120 46" fill="none"/>
+    <circle cx="120" cy="40" r="8" fill="#FFD977"/>
+
+    <!-- 몸통 (아래는 슬라임답게 물결) -->
+    <path d="M74 164
+             C62 142 62 112 74 92
+             C88 62 152 62 166 92
+             C178 112 178 142 166 164
+             Q158 174 146 169
+             Q134 164 122 170
+             Q110 176 98 169
+             Q86 163 80 168
+             Q75 171 74 164 Z" fill="#3DF5C9"/>
+  </g>
+
+  <!-- 몸통 하이라이트 -->
+  <path d="M84 88 Q97 70 118 68" fill="none" stroke="#8CFFE3" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- ===== 얼굴 ===== -->
+  <!-- 호기심 눈썹 -->
+  <path d="M89 93 Q96 89 103 92" fill="none" stroke="#14204A" stroke-width="5" stroke-linecap="round"/>
+  <path d="M135 90 Q143 85 151 90" fill="none" stroke="#14204A" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- 초롱초롱 눈 -->
+  <circle cx="96" cy="116" r="14" fill="#14204A"/>
+  <circle cx="144" cy="116" r="14" fill="#14204A"/>
+  <circle cx="91" cy="110" r="5" fill="#FFFFFF"/>
+  <circle cx="139" cy="110" r="5" fill="#FFFFFF"/>
+  <circle cx="101" cy="121" r="2.5" fill="#FFFFFF"/>
+  <circle cx="149" cy="121" r="2.5" fill="#FFFFFF"/>
+
+  <!-- 볼터치 -->
+  <ellipse cx="74" cy="142" rx="10" ry="6.5" fill="#FF8FA3" opacity="0.8"/>
+  <ellipse cx="166" cy="142" rx="10" ry="6.5" fill="#FF8FA3" opacity="0.8"/>
+
+  <!-- 우주쓰레기도 삼킬 큰 입 + 혀 -->
+  <path d="M96 140 Q120 136 144 140 Q146 166 120 170 Q94 166 96 140 Z" fill="#14204A"/>
+  <path d="M106 156 Q120 166 134 156 Q131 167 120 169 Q109 167 106 156 Z" fill="#FF8FA3"/>
+
+  <!-- ===== 반투명 헬멧 ===== -->
+  <circle cx="120" cy="106" r="82" fill="#BFE8FF" opacity="0.16"/>
+  <circle cx="120" cy="106" r="82" fill="none" stroke="#14204A" stroke-width="8"/>
+  <!-- 유리 반사광 -->
+  <path d="M162 44 Q180 58 186 78" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" opacity="0.85"/>
+  <path d="M178 96 Q180 104 179 112" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- 헬멧 받침 링 -->
+  <g stroke="#14204A" stroke-width="8" stroke-linejoin="round">
+    <rect x="52" y="174" width="136" height="28" rx="14" fill="#FFD977"/>
+  </g>
+  <circle cx="74" cy="188" r="3.5" fill="#14204A"/>
+  <circle cx="166" cy="188" r="3.5" fill="#14204A"/>
+</svg>

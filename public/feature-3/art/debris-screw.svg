@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="우주쓰레기 2등급 — 나사못">
+  <!-- 2등급: 나사못 · 둥글둥글 카툰 스크루 -->
+  <g stroke="#14204A" stroke-width="6.5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 몸통 (테이퍼드 샤프트) -->
+    <path d="M47 40 L73 40 L64 94 Q60 103 56 94 Z" fill="#F5B84D"/>
+    <!-- 머리 -->
+    <rect x="34" y="16" width="52" height="26" rx="12" fill="#FFD977"/>
+    <!-- 일자 홈 -->
+    <rect x="54" y="22" width="12" height="14" rx="5" fill="#14204A" stroke="none"/>
+  </g>
+  <!-- 나사산 -->
+  <g stroke="#14204A" stroke-width="5" stroke-linecap="round">
+    <path d="M50 54 L69 50"/>
+    <path d="M53 68 L66 64"/>
+    <path d="M56 82 L63 79"/>
+  </g>
+  <!-- 반짝임 -->
+  <path d="M41 23 Q46 20 51 20" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+  <path d="M88 56 L90.5 61.5 L96 64 L90.5 66.5 L88 72 L85.5 66.5 L80 64 L85.5 61.5 Z" fill="#3DF5C9"/>
+  <circle cx="30" cy="66" r="3" fill="#FF8FA3"/>
+</svg>

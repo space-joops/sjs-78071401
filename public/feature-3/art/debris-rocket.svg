@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="우주쓰레기 4등급 — 로켓 노즐 잔해">
+  <!-- 4등급: 버려진 로켓 노즐 -->
+  <g stroke="#14204A" stroke-width="6.5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 노즐 콘 -->
+    <path d="M44 28 L76 28 L92 82 L28 82 Z" fill="#FF8FA3"/>
+    <!-- 하단 림 -->
+    <ellipse cx="60" cy="84" rx="33" ry="10" fill="#F06A85"/>
+    <!-- 상단 결합부 -->
+    <rect x="38" y="14" width="44" height="18" rx="9" fill="#FFD977"/>
+  </g>
+  <!-- 리벳 + 그을음 -->
+  <circle cx="48" cy="46" r="3" fill="#14204A"/>
+  <circle cx="66" cy="52" r="3" fill="#14204A"/>
+  <g stroke="#14204A" stroke-width="4.5" stroke-linecap="round">
+    <path d="M40 68 L48 66"/>
+    <path d="M68 70 L76 68"/>
+  </g>
+  <!-- 반짝임 -->
+  <path d="M50 36 Q47 46 48 56" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.75"/>
+  <path d="M100 30 L102.5 35.5 L108 38 L102.5 40.5 L100 46 L97.5 40.5 L92 38 L97.5 35.5 Z" fill="#3DF5C9"/>
+  <circle cx="20" cy="42" r="3" fill="#FFD977"/>
+</svg>

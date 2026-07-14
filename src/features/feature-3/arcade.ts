@@ -4,6 +4,7 @@
 // 점수/체력 반영은 hooks를 통해 스토어에 위임한다.
 
 import { DEBRIS_TIERS } from "./constants";
+import { loadSprites, type Sprites } from "./sprites";
 
 export type ArcadeHooks = {
   /** 쓰레기 흡수 → 실제 획득 XP 반환 */
@@ -73,6 +74,7 @@ export class ArcadeEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private hooks: ArcadeHooks;
+  private sprites: Sprites;
   private raf = 0;
   private running = false;
   private lastT = 0;
@@ -114,6 +116,7 @@ export class ArcadeEngine {
     if (!ctx) throw new Error("2D 컨텍스트를 만들 수 없습니다");
     this.ctx = ctx;
     this.hooks = hooks;
+    this.sprites = loadSprites();
 
     canvas.style.touchAction = "none";
     canvas.addEventListener("pointerdown", this.onDown);
@@ -547,6 +550,96 @@ export class ArcadeEngine {
   }
 
   private drawJoops(): void {
+    const stage = this.hooks.getStage();
+    const sprite = this.sprites.joopsByStage[stage.index];
+    if (sprite) this.drawJoopsSprite(sprite);
+    else this.drawJoopsVector();
+  }
+
+  /** SVG 아트 스프라이트 버전 */
+  private drawJoopsSprite(img: HTMLImageElement): void {
+    const ctx = this.ctx;
+    const j = this.joops;
+    const stage = this.hooks.getStage();
+    const size = stage.size;
+    const spd = Math.hypot(j.vx, j.vy);
+    const dir = Math.atan2(j.vy, j.vx);
+    const squash = 1 + Math.min(0.22, spd / 900);
+    const W = size * 4.3; // 스프라이트 한 변 (헬멧 포함)
+
+    ctx.save();
+    ctx.translate(j.x, j.y);
+
+    // 별빛 단계 아우라
+    if (stage.index >= 4) {
+      const g = ctx.createRadialGradient(0, 0, W * 0.2, 0, 0, W * 0.75);
+      g.addColorStop(0, "rgba(255,217,122,0.28)");
+      g.addColorStop(1, "rgba(255,217,122,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, W * 0.75, 0, TAU);
+      ctx.fill();
+    }
+
+    ctx.rotate(dir * Math.min(1, spd / 500) * 0.25);
+    ctx.scale(squash, 1 / squash);
+
+    // 피격 중 깜빡임 (무적 시간 표시)
+    if (j.hurtT > 0) ctx.globalAlpha = 0.55 + 0.45 * Math.sin(this.time * 26);
+    ctx.shadowColor = stage.glowColor;
+    ctx.shadowBlur = 24;
+    ctx.drawImage(img, -W / 2, -W / 2, W, W);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+
+    // 진화 액세서리: 청소부 링(3단계+), 수호자 실드(4단계+)
+    if (stage.index >= 2) {
+      ctx.strokeStyle = "rgba(255,255,255,0.55)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(0, W * 0.14, W * 0.44, W * 0.13, -0.25, 0, TAU);
+      ctx.stroke();
+    }
+    if (stage.index >= 3) {
+      ctx.strokeStyle = "rgba(195,155,255,0.5)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, W * 0.5, -0.9, 0.5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, W * 0.5, Math.PI - 0.9, Math.PI + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 교신 중이면 안테나 구슬에 초록 펄스
+    if (this.hooks.isComm()) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 6);
+      ctx.fillStyle = `rgba(74,222,128,${0.35 + 0.4 * pulse})`;
+      ctx.shadowColor = "#4ade80";
+      ctx.shadowBlur = 12 * pulse;
+      ctx.beginPath();
+      ctx.arc(j.x, j.y - W / 3, W * 0.045, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // 체력이 낮으면 눈물 방울
+    if (this.hooks.getHealth() < 30 && j.hurtT <= 0) {
+      const bob = Math.sin(this.time * 3) * 2;
+      const tx = j.x - W * 0.1;
+      const ty = j.y + W * 0.06 + bob;
+      ctx.fillStyle = "#7CC8FF";
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - 7);
+      ctx.quadraticCurveTo(tx + 6, ty + 2, tx, ty + 6);
+      ctx.quadraticCurveTo(tx - 6, ty + 2, tx, ty - 7);
+      ctx.fill();
+    }
+  }
+
+  /** 폴백: 코드 드로잉 버전 */
+  private drawJoopsVector(): void {
     const ctx = this.ctx;
     const j = this.joops;
     const stage = this.hooks.getStage();
@@ -733,6 +826,19 @@ export class ArcadeEngine {
     const def = DEBRIS_TIERS[d.tier - 1];
     const scale = d.eating !== null ? Math.max(0, 1 - d.eating) : 1;
     if (scale <= 0) return;
+
+    // SVG 아트 스프라이트 (로드 전이면 벡터 폴백)
+    const img = this.sprites.debris[d.tier - 1];
+    if (img) {
+      const s = Math.max(26, def.radius * 3.4) * scale;
+      ctx.save();
+      ctx.translate(d.x, d.y);
+      ctx.rotate(d.rot * 0.6);
+      ctx.drawImage(img, -s / 2, -s / 2, s, s);
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.translate(d.x, d.y);
     ctx.rotate(d.rot);
@@ -867,6 +973,36 @@ export class ArcadeEngine {
   }
 
   private drawFriend(f: Friend): void {
+    const img = this.sprites.friends[f.hue > 300 ? 0 : 1];
+    if (!img) {
+      this.drawFriendVector(f);
+      return;
+    }
+    const ctx = this.ctx;
+    const W = 62 * (f.met ? 1 + 0.08 * Math.sin(f.metT * 9) : 1);
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(Math.sin(f.wobble * 1.6) * 0.12);
+    ctx.drawImage(img, -W / 2, -W / 2, W, W);
+    ctx.restore();
+    // 조우 중엔 머리 위 하트
+    if (f.met) {
+      const bob = Math.sin(f.metT * 6) * 3;
+      ctx.save();
+      ctx.translate(f.x, f.y - W * 0.62 + bob);
+      ctx.scale(1.4, 1.4);
+      ctx.fillStyle = "#fda4af";
+      ctx.beginPath();
+      ctx.moveTo(0, 3);
+      ctx.bezierCurveTo(-6, -3, -3, -8, 0, -4);
+      ctx.bezierCurveTo(3, -8, 6, -3, 0, 3);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /** 폴백: 코드 드로잉 버전 */
+  private drawFriendVector(f: Friend): void {
     const ctx = this.ctx;
     ctx.save();
     ctx.translate(f.x, f.y);

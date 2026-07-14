@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Space Joops — SVG 아트 미리보기</title>
+<style>
+  :root {
+    --navy: #0b1026;
+    --card: #131b3a;
+    --line: rgba(255, 255, 255, 0.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(61, 245, 201, 0.06), transparent 45%),
+      radial-gradient(ellipse at 85% 80%, rgba(255, 143, 163, 0.06), transparent 45%),
+      var(--navy);
+    color: #eef2ff;
+    font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif;
+    padding: 28px 16px 48px;
+  }
+  header { text-align: center; margin-bottom: 28px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
+  header p { margin: 6px 0 0; font-size: 12px; color: rgba(238, 242, 255, 0.5); }
+  .palette { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+  .chip { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); }
+  main { max-width: 860px; margin: 0 auto; display: grid; gap: 14px; }
+  .hero {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 24px; padding: 28px 16px;
+  }
+  .hero img { width: min(62vw, 300px); height: auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+    padding: 18px 12px 14px; text-align: center;
+  }
+  .card img { width: 84px; height: 84px; }
+  .name { margin-top: 8px; font-size: 13px; font-weight: 700; }
+  .tier { margin-top: 2px; font-size: 11px; color: #3df5c9; }
+  .desc { margin-top: 4px; font-size: 11px; color: rgba(238, 242, 255, 0.45); line-height: 1.5; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🫧 Space Joops — SVG 아트</h1>
+    <p>미니멀 플랫 · 굵고 둥근 외곽선 · 팝 컬러</p>
+    <div class="palette" aria-label="팔레트">
+      <span class="chip" style="background:#0b1026" title="Deep Navy #0B1026"></span>
+      <span class="chip" style="background:#3df5c9" title="Neon Mint #3DF5C9"></span>
+      <span class="chip" style="background:#ffd977" title="Pastel Yellow #FFD977"></span>
+      <span class="chip" style="background:#ff8fa3" title="Coral Pink #FF8FA3"></span>
+      <span class="chip" style="background:#7cc8ff" title="Ice Blue #7CC8FF"></span>
+      <span class="chip" style="background:#14204a" title="Outline Navy #14204A"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img src="joops.svg" alt="줍스 — 반투명 헬멧을 쓴 우주 슬라임" />
+      <div class="name">줍스 (Joops)</div>
+      <p class="desc">반투명 우주복 헬멧을 쓴 슬라임 외계 생명체.<br />큰 입으로 우주쓰레기를 냠냠, 밝고 호기심 가득한 표정.</p>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <img src="debris-fleck.svg" alt="페인트 조각" />
+        <div class="name">페인트 조각</div>
+        <div class="tier">TIER 1</div>
+        <p class="desc">가장 작고 흔한 쓰레기</p>
+      </div>
+      <div class="card">
+        <img src="debris-screw.svg" alt="나사못" />
+        <div class="name">나사못</div>
+        <div class="tier">TIER 2</div>
+        <p class="desc">우주 어딘가에서 풀려 나온 스크루</p>
+      </div>
+      <div class="card">
+        <img src="debris-panel.svg" alt="태양전지판 파편" />
+        <div class="name">패널 파편</div>
+        <div class="tier">TIER 3</div>
+        <p class="desc">부서진 인공위성의 태양전지판</p>
+      </div>
+      <div class="card">
+        <img src="debris-rocket.svg" alt="로켓 노즐 잔해" />
+        <div class="name">로켓 잔해</div>
+        <div class="tier">TIER 4</div>
+        <p class="desc">버려진 로켓의 노즐 부품</p>
+      </div>
+      <div class="card">
+        <img src="debris-satellite.svg" alt="폐위성" />
+        <div class="name">폐위성</div>
+        <div class="tier">TIER 5</div>
+        <p class="desc">날개가 부러진 채 떠도는 죽은 위성</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

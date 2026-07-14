@@ -36,9 +36,13 @@ export default function JoopsApp() {
     <div className="min-h-dvh h-dvh flex flex-col overflow-hidden bg-[#02040a] text-white font-sans">
       {!ready ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">
-          <span className="text-4xl animate-pulse" aria-hidden>
-            🛰️
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/feature-3/art/joops.svg"
+            alt=""
+            aria-hidden
+            className="h-24 w-24 animate-pulse"
+          />
           <p className="text-sm text-white/60">궤도에 접속하는 중…</p>
         </div>
       ) : !snap ? (
