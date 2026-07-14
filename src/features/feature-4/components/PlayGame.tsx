@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useGameState } from "../hooks/useGameState";
 import { DEBRIS, FRIEND_NAMES, stageForLevel } from "../lib/constants";
-import { buildCloudTexture, buildEarthTexture } from "../lib/earthTexture";
+import {
+  buildCloudTexture,
+  buildEarthTexture,
+  buildNightTexture,
+} from "../lib/earthTexture";
 import { loadWorld } from "../lib/geo";
 import { joopsDataUrl } from "../lib/joopsArt";
 import { isInContact } from "../lib/orbit";
@@ -311,11 +315,16 @@ export default function PlayGame() {
     sprites.set("booster", makeSprite("booster", 16));
 
     let earthTex: HTMLCanvasElement | null = null;
+    let nightTex: HTMLCanvasElement | null = null;
     let cloudTex: HTMLCanvasElement | null = null;
     let starsFar: HTMLCanvasElement | null = null;
     let starsNear: HTMLCanvasElement | null = null;
+    // 주야 블렌드용 오프스크린 밴드(밤 텍스처 + 터미네이터 마스크)
+    const nightBand = document.createElement("canvas");
+    const nightBandCtx = nightBand.getContext("2d")!;
     loadWorld().then((world) => {
       earthTex = buildEarthTexture(world, 2048, 1024, "game");
+      nightTex = buildNightTexture(world, 2048, 1024);
       cloudTex = buildCloudTexture(1400, 500, 11);
     });
 
@@ -351,6 +360,8 @@ export default function PlayGame() {
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       horizonY = h * 0.7;
+      nightBand.width = Math.max(2, Math.ceil(w * 0.52));
+      nightBand.height = Math.max(2, Math.ceil(h - horizonY + 96));
       buildStars();
     };
     resize();
@@ -756,6 +767,42 @@ export default function PlayGame() {
             ctx.drawImage(cloudTex, dx, horizonY - 10, cw, h - horizonY + 60);
           }
           ctx.globalAlpha = 1;
+        }
+        // 밤 지역 — 태양 반대편(왼쪽)에서 천천히 표류하는 터미네이터.
+        // 밤 텍스처를 같은 스크롤 오프셋으로 밴드에 그리고 가로 그라데이션으로
+        // 마스킹해 낮 위에 얹는다 → 도시 불빛이 밤 지역에서 반짝인다.
+        if (nightTex) {
+          const termX = w * (0.3 + 0.05 * Math.sin(elapsed * 0.01));
+          const soft = w * 0.16;
+          const bandW = Math.min(nightBand.width, Math.ceil(termX + soft));
+          const bandH = Math.min(nightBand.height, Math.ceil(dh));
+          nightBandCtx.clearRect(0, 0, nightBand.width, nightBand.height);
+          for (let dx = -off; dx < bandW + dw; dx += dw) {
+            nightBandCtx.drawImage(
+              nightTex,
+              0,
+              sy,
+              nightTex.width,
+              sh,
+              dx,
+              0,
+              dw + 1,
+              dh,
+            );
+          }
+          nightBandCtx.globalCompositeOperation = "destination-in";
+          const mask = nightBandCtx.createLinearGradient(
+            termX - soft,
+            0,
+            termX + soft,
+            0,
+          );
+          mask.addColorStop(0, "rgba(0,0,0,0.93)");
+          mask.addColorStop(1, "rgba(0,0,0,0)");
+          nightBandCtx.fillStyle = mask;
+          nightBandCtx.fillRect(0, 0, bandW, bandH);
+          nightBandCtx.globalCompositeOperation = "source-over";
+          ctx.drawImage(nightBand, 0, 0, bandW, bandH, 0, horizonY - 6, bandW, bandH);
         }
       } else {
         const og = ctx.createLinearGradient(0, horizonY, 0, h);
