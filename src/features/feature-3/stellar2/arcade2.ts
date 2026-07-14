@@ -266,10 +266,17 @@ export class ArcadeEngine {
       this.tItem = rand(40, 70);
     }
 
-    // 줍스 이동: 조종 또는 자율 비행
+    // 줍스 이동: 조종 또는 자율 비행 (시무룩하면 둔해진다)
     const weak = health < 30;
-    const accel = (this.target ? 900 : 220) * (energy < 12 ? 0.45 : 1) * (weak ? 0.6 : 1);
-    const maxV = (this.target ? 380 : 160) * (weak ? 0.55 : 1) + (j.dashT > 0 ? 260 : 0);
+    const sulkyMove = this.hooks.getMood() < 25;
+    const accel =
+      (this.target ? 900 : 220) *
+      (energy < 12 ? 0.45 : 1) *
+      (weak ? 0.6 : 1) *
+      (sulkyMove ? 0.6 : 1);
+    const maxV =
+      ((this.target ? 380 : 160) * (weak ? 0.55 : 1) + (j.dashT > 0 ? 260 : 0)) *
+      (sulkyMove ? 0.75 : 1);
     let tx: number | null = null;
     let ty: number | null = null;
     if (this.target) {
@@ -702,7 +709,9 @@ export class ArcadeEngine {
     const spd = Math.hypot(j.vx, j.vy);
     const dir = Math.atan2(j.vy, j.vx);
     const squash = 1 + Math.min(0.22, spd / 900);
-    const W = size * 4.3; // 스프라이트 한 변 (헬멧 포함)
+    const fat = this.hooks.getEnergy() > 85; // 포만 → 통통
+    const sulky = this.hooks.getMood() < 25; // 방치 → 시무룩
+    const W = size * 4.3 * (fat ? 1.07 : 1); // 스프라이트 한 변 (헬멧 포함)
 
     ctx.save();
     ctx.translate(j.x, j.y);
@@ -725,7 +734,9 @@ export class ArcadeEngine {
     if (j.hurtT > 0) ctx.globalAlpha = 0.55 + 0.45 * Math.sin(this.time * 26);
     ctx.shadowColor = stage.glowColor;
     ctx.shadowBlur = 24;
+    if (sulky) ctx.filter = "saturate(0.55) brightness(0.92)";
     ctx.drawImage(img, -W / 2, -W / 2, W, W);
+    ctx.filter = "none";
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 
@@ -772,6 +783,18 @@ export class ArcadeEngine {
       ctx.quadraticCurveTo(tx + 6, ty + 2, tx, ty + 6);
       ctx.quadraticCurveTo(tx - 6, ty + 2, tx, ty - 7);
       ctx.fill();
+    }
+
+    // 시무룩 — 머리 위 생각 방울(…)
+    if (sulky) {
+      ctx.fillStyle = "rgba(148,163,184,0.8)";
+      const bx = j.x + W * 0.3;
+      const by = j.y - W * 0.38;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(bx + i * 9, by - i * 7, 2 + i * 1.3, 0, TAU);
+        ctx.fill();
+      }
     }
   }
 

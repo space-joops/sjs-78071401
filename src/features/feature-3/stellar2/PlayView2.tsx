@@ -9,6 +9,7 @@ import { EarthRenderer } from "../earthRenderer";
 import { ArcadeEngine, type ArcadeHooks } from "./arcade2";
 import { groundPointAt, formatEta } from "../orbit";
 import { CARE, STAGES, HATCH_TAPS } from "./balance";
+import { sfx } from "./audio";
 
 type Props = { snap: Snapshot; onOpenTrack: () => void };
 
@@ -68,10 +69,25 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
     }
 
     const hooks: ArcadeHooks = {
-      onEat: (tier) => store.eatDebris(tier),
-      onHurt: (dmg) => store.collide(dmg),
-      onEncounter: () => store.encounter(),
-      onGlobalItem: () => store.pickGlobalItem(),
+      onEat: (tier) => {
+        const before = store.getSnapshot()?.level ?? 1;
+        const xp = store.eatDebris(tier);
+        sfx.eat(tier);
+        if ((store.getSnapshot()?.level ?? 1) > before) sfx.levelUp();
+        return xp;
+      },
+      onHurt: (dmg) => {
+        store.collide(dmg);
+        sfx.hurt();
+      },
+      onEncounter: () => {
+        sfx.encounter();
+        return store.encounter();
+      },
+      onGlobalItem: () => {
+        store.pickGlobalItem();
+        sfx.item();
+      },
       getStage: () => {
         const s = store.getSnapshot();
         const stage = s?.stage ?? STAGES[0];
@@ -90,7 +106,12 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
       isComm: () => store.getSnapshot()?.comm.active ?? false,
       isHatched: () => store.getSnapshot()?.st.hatched ?? true,
       getEggTaps: () => store.getSnapshot()?.st.hatchTaps ?? 0,
-      onEggTap: () => store.tapEgg(),
+      onEggTap: () => {
+        const was = store.getSnapshot()?.st.hatched ?? false;
+        store.tapEgg();
+        if (!was && store.getSnapshot()?.st.hatched) sfx.hatch();
+        else sfx.tap();
+      },
       getBranch: () => store.getSnapshot()?.branch ?? "none",
     };
     const engine = new ArcadeEngine(arcadeCanvas, hooks);
@@ -136,6 +157,7 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
     if (!res.ok) {
       showToast(res.reason ?? "지금은 안 돼요");
     } else {
+      sfx.care();
       showToast(
         kind === "feed" ? "냠냠! 에너지 회복 🍬" : kind === "repair" ? "수리 완료 🔧" : "기분 최고 💕",
       );
@@ -167,7 +189,11 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
   };
 
   return (
-    <div ref={boxRef} className="relative flex-1 min-h-0 overflow-hidden select-none">
+    <div
+      ref={boxRef}
+      className="relative flex-1 min-h-0 overflow-hidden select-none"
+      onPointerDown={() => sfx.unlock()}
+    >
       {!glOk && (
         <div className="absolute inset-0 bg-gradient-to-b from-[#02040a] via-[#0a1428] to-[#1a3a5c]" />
       )}
@@ -195,14 +221,25 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onOpenTrack}
-            className="pointer-events-auto flex h-11 items-center gap-1 rounded-full bg-black/40 backdrop-blur-sm px-3.5 text-sm border border-white/10"
-          >
-            <span aria-hidden>🗺️</span>
-            <span className="font-medium">관제</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => store.toggleMuted()}
+              aria-label={snap.muted ? "효과음 켜기" : "효과음 끄기"}
+              aria-pressed={snap.muted}
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm text-base border border-white/10"
+            >
+              <span aria-hidden>{snap.muted ? "🔇" : "🔊"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenTrack}
+              className="pointer-events-auto flex h-11 items-center gap-1 rounded-full bg-black/40 backdrop-blur-sm px-3.5 text-sm border border-white/10"
+            >
+              <span aria-hidden>🗺️</span>
+              <span className="font-medium">관제</span>
+            </button>
+          </div>
         </div>
 
         {/* 상태 바 + 교신 칩 */}

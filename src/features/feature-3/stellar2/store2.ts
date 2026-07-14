@@ -30,6 +30,7 @@ import {
   type OrbitParams,
 } from "../orbit";
 import { regionAt, type Region } from "../countries";
+import { setMuted } from "./audio";
 
 export type PersistedState = {
   version: 1;
@@ -53,6 +54,8 @@ export type PersistedState = {
   hatchTaps: number;
   /** 진화 분기 (성체 도달 시 결정) */
   branch: BranchId;
+  /** 효과음 음소거 */
+  muted: boolean;
 };
 
 export type AwayReport = {
@@ -87,6 +90,7 @@ export type Snapshot = {
   hatched: boolean;
   branch: BranchId;
   branchDef: BranchDef | null;
+  muted: boolean;
 };
 
 const clamp = (v: number, lo: number, hi: number) =>
@@ -116,6 +120,8 @@ export class Stellar2Store {
           parsed.hatched = parsed.hatched ?? true;
           parsed.hatchTaps = parsed.hatchTaps ?? HATCH_TAPS;
           parsed.branch = parsed.branch ?? "none";
+          parsed.muted = parsed.muted ?? false;
+          setMuted(parsed.muted);
           this.st = parsed;
           this.awayReport = this.simulateAway(Date.now());
         }
@@ -153,7 +159,9 @@ export class Stellar2Store {
       hatched: false,
       hatchTaps: 0,
       branch: "none",
+      muted: false,
     };
+    setMuted(false);
     this.awayReport = null;
     this.save();
     this.startTicking();
@@ -178,6 +186,14 @@ export class Stellar2Store {
 
   ackBranchNotice(): void {
     this.branchNotice = null;
+    this.notify();
+  }
+
+  toggleMuted(): void {
+    if (!this.st) return;
+    this.st.muted = !this.st.muted;
+    setMuted(this.st.muted);
+    this.scheduleSave();
     this.notify();
   }
 
@@ -428,6 +444,7 @@ export class Stellar2Store {
       hatched: this.st.hatched,
       branch: this.st.branch,
       branchDef: this.st.branch !== "none" ? BRANCHES[this.st.branch] : null,
+      muted: this.st.muted,
     };
   }
 
