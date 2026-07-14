@@ -1,6 +1,6 @@
 // 실제 대륙 데이터로 지구 텍스처(등장방형)를 오프스크린 캔버스에 그린다.
 // style "game": 그래비티풍 몽환적 지구 / "console": NASA 관제 화면풍
-import type { WorldData } from "./geo";
+import { pointInCountry, type WorldData } from "./geo";
 import { mulberry32 } from "./rng";
 
 export type EarthStyle = "game" | "console";
@@ -86,6 +86,76 @@ export function buildEarthTexture(
       ctx.strokeStyle = "rgba(72,228,196,0.75)";
       ctx.lineWidth = Math.max(1, w / 1800);
       ctx.stroke();
+    }
+  }
+  return c;
+}
+
+/**
+ * 밤 지구 텍스처 — 어두운 대륙 위에 도시 불빛.
+ * 해안선(대륙 링 정점)을 앵커로 샘플링해 실제 인구 분포처럼 해안에 몰리게 한다.
+ */
+export function buildNightTexture(
+  world: WorldData | null,
+  w: number,
+  h: number,
+): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#02060f";
+  ctx.fillRect(0, 0, w, h);
+  if (!world) return c;
+
+  traceLand(ctx, world, w, h);
+  ctx.fillStyle = "#0a1420";
+  ctx.fill("evenodd");
+  ctx.strokeStyle = "rgba(70,90,120,0.28)";
+  ctx.lineWidth = Math.max(1, w / 1800);
+  ctx.stroke();
+
+  const rnd = mulberry32(99);
+  const dotScale = w / 2048;
+  const light = (x: number, y: number) => {
+    const r = (0.5 + rnd() * 1.1) * dotScale;
+    ctx.fillStyle = `rgba(255,201,122,${0.35 + rnd() * 0.55})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  let placed = 0;
+  const MAX = 1600;
+  for (const country of world.countries) {
+    if (country.name === "Antarctica") continue;
+    for (const ring of country.rings) {
+      const f = ring.flat;
+      const n = f.length / 2;
+      // 해안 불빛
+      for (let i = 0; i < n && placed < MAX; i += 2 + Math.floor(rnd() * 6)) {
+        const lat = f[i * 2 + 1];
+        if (Math.abs(lat) > 62 || rnd() < Math.abs(lat) / 95) continue;
+        const jl = f[i * 2] + (rnd() - 0.5) * 1.6;
+        const jt = lat + (rnd() - 0.5) * 1.6;
+        if (!pointInCountry(country, jl, jt)) continue;
+        light(X(jl, w), Y(jt, h));
+        placed++;
+      }
+      // 내륙 불빛(큰 땅덩이만 소량)
+      const [a, b, x2, y2] = ring.bbox;
+      const area = (x2 - a) * (y2 - b);
+      if (area > 80) {
+        const inland = Math.min(26, Math.floor(area / 45));
+        for (let i = 0; i < inland && placed < MAX; i++) {
+          const jl = a + rnd() * (x2 - a);
+          const jt = b + rnd() * (y2 - b);
+          if (Math.abs(jt) > 58) continue;
+          if (!pointInCountry(country, jl, jt)) continue;
+          light(X(jl, w), Y(jt, h));
+          placed++;
+        }
+      }
     }
   }
   return c;
