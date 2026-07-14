@@ -199,6 +199,29 @@ export const DAILY = {
   globalLinkMs: 5 * 60 * 1000,
 } as const;
 
+// ---- 업적 ----
+
+export type AchievementDef = {
+  id: string;
+  name: string;
+  desc: string;
+  icon: string;
+};
+
+export const ACHIEVEMENTS: AchievementDef[] = [
+  { id: "hatch", name: "안녕, 세상!", desc: "알에서 부화했다", icon: "🐣" },
+  { id: "first-eat", name: "첫 청소", desc: "우주쓰레기를 처음 먹었다", icon: "🍬" },
+  { id: "clean-100", name: "궤도 청소부", desc: "우주쓰레기 누적 100개 청소", icon: "🧹" },
+  { id: "clean-1000", name: "케슬러 해결사", desc: "우주쓰레기 누적 1,000개 청소", icon: "🌏" },
+  { id: "first-friend", name: "우주 친구", desc: "다른 줍스와 처음 조우했다", icon: "💞" },
+  { id: "adult", name: "어엿한 성체", desc: "성체로 성장했다 (Lv10)", icon: "🌟" },
+  { id: "branch", name: "나만의 길", desc: "진화 분기를 완료했다", icon: "🧬" },
+  { id: "train-1", name: "훈련 수료", desc: "회피 훈련을 처음 완료했다", icon: "🎯" },
+  { id: "train-60", name: "회피의 달인", desc: "회피 훈련에서 60점을 넘겼다", icon: "🏅" },
+  { id: "shower", name: "소나기 속으로", desc: "파편 소나기 중에 쓰레기를 먹었다", icon: "☄️" },
+  { id: "global-link", name: "전 지구 교신", desc: "글로벌 링크 코어를 획득했다", icon: "⭐" },
+];
+
 export const CARE = {
   feed: { energy: 30, xp: 6, cooldownMs: 60_000, label: "먹이 주기" },
   repair: { health: 25, xp: 6, cooldownMs: 120_000, label: "수리하기" },

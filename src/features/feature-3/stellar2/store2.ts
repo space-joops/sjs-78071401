@@ -16,6 +16,8 @@ import {
   TRAIN,
   SHOWER,
   DAILY,
+  ACHIEVEMENTS,
+  type AchievementDef,
   levelForXp,
   stageForLevel,
   stageIndexForLevel,
@@ -63,6 +65,8 @@ export type PersistedState = {
   training: { bestScore: number; count: number; lastAt: number };
   /** 일일 보상을 마지막으로 받은 로컬 날짜 (YYYY-M-D) */
   lastDailyYmd: string;
+  /** 달성한 업적: id → 달성 시각(ms) */
+  achievements: Record<string, number>;
 };
 
 export type AwayReport = {
@@ -122,6 +126,8 @@ export class Stellar2Store {
   branchNotice: BranchDef | null = null;
   /** 일일 보급 수령 대기 여부 */
   pendingDaily = false;
+  /** 새로 달성한 업적 토스트 큐 (맨 앞이 현재 표시 대상) */
+  achievementNotices: AchievementDef[] = [];
   /** 파편 소나기 종료 시각 (in-memory) */
   private showerUntil = 0;
 
@@ -141,6 +147,7 @@ export class Stellar2Store {
           parsed.muted = parsed.muted ?? false;
           parsed.training = parsed.training ?? { bestScore: 0, count: 0, lastAt: 0 };
           parsed.lastDailyYmd = parsed.lastDailyYmd ?? "";
+          parsed.achievements = parsed.achievements ?? {};
           setMuted(parsed.muted);
           this.st = parsed;
           this.awayReport = this.simulateAway(Date.now());
@@ -185,6 +192,7 @@ export class Stellar2Store {
       muted: false,
       training: { bestScore: 0, count: 0, lastAt: 0 },
       lastDailyYmd: "",
+      achievements: {},
     };
     setMuted(false);
     this.awayReport = null;
@@ -233,6 +241,8 @@ export class Stellar2Store {
     if (isBest) this.st.training.bestScore = score;
     this.st.training.count += 1;
     this.st.training.lastAt = Date.now();
+    this.award("train-1");
+    if (score >= 60) this.award("train-60");
     this.checkBranch();
     this.scheduleSave();
     this.notify();
@@ -253,6 +263,7 @@ export class Stellar2Store {
       this.st.mood = 100;
       this.st.energy = Math.max(this.st.energy, 80);
       this.checkDaily();
+      this.award("hatch");
     }
     this.scheduleSave();
     this.notify();
@@ -289,6 +300,19 @@ export class Stellar2Store {
     this.notify();
   }
 
+  /** 업적 부여 — 처음 달성할 때만 기록·토스트 */
+  private award(id: string): void {
+    if (!this.st || this.st.achievements[id]) return;
+    this.st.achievements[id] = Date.now();
+    const def = ACHIEVEMENTS.find((a) => a.id === id);
+    if (def) this.achievementNotices.push(def);
+  }
+
+  ackAchievementNotice(): void {
+    this.achievementNotices.shift();
+    this.notify();
+  }
+
   // ---- React 바인딩 ----
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -312,6 +336,10 @@ export class Stellar2Store {
     this.st.mood = clamp(this.st.mood + 1, 0, 100);
     this.st.debrisCleaned += 1;
     this.st.cleanedByTier[tier - 1] = (this.st.cleanedByTier[tier - 1] ?? 0) + 1;
+    this.award("first-eat");
+    if (this.st.debrisCleaned >= 100) this.award("clean-100");
+    if (this.st.debrisCleaned >= 1000) this.award("clean-1000");
+    if (Date.now() < this.showerUntil) this.award("shower");
     this.checkBranch();
     this.scheduleSave();
     this.notify();
@@ -337,6 +365,7 @@ export class Stellar2Store {
     this.st.xp += gained;
     this.st.mood = clamp(this.st.mood + 12, 0, 100);
     this.st.encounters += 1;
+    this.award("first-friend");
     this.checkBranch();
     this.scheduleSave();
     this.notify();
@@ -347,6 +376,7 @@ export class Stellar2Store {
   pickGlobalItem(): void {
     if (!this.st) return;
     this.st.globalLinkUntil = Date.now() + GLOBAL_LINK_MS;
+    this.award("global-link");
     this.scheduleSave();
     this.notify();
   }
@@ -416,6 +446,8 @@ export class Stellar2Store {
     const branch = sum(FORGE_TIERS) >= sum(TECHNO_TIERS) ? "forge" : "techno";
     st.branch = branch;
     this.branchNotice = BRANCHES[branch];
+    this.award("adult");
+    this.award("branch");
   }
 
   private tick(): void {

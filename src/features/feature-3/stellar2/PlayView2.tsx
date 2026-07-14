@@ -11,6 +11,7 @@ import { groundPointAt, formatEta } from "../orbit";
 import { CARE, STAGES, HATCH_TAPS } from "./balance";
 import { sfx } from "./audio";
 import MiniGame from "./MiniGame";
+import CodexModal from "./CodexModal";
 
 type Props = { snap: Snapshot; onOpenTrack: () => void };
 
@@ -50,12 +51,21 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [showTip, setShowTip] = useState(true);
   const [training, setTraining] = useState(false);
+  const [codexOpen, setCodexOpen] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const tip = setTimeout(() => setShowTip(false), 7000);
     return () => clearTimeout(tip);
   }, []);
+
+  // 업적 토스트 자동 닫힘
+  const achNotice = store.achievementNotices[0] ?? null;
+  useEffect(() => {
+    if (!achNotice) return;
+    const t = setTimeout(() => store.ackAchievementNotice(), 2400);
+    return () => clearTimeout(t);
+  }, [achNotice, store]);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -230,6 +240,14 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setCodexOpen(true)}
+              aria-label="도감과 업적 열기"
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm text-base border border-white/10"
+            >
+              <span aria-hidden>📔</span>
+            </button>
+            <button
+              type="button"
               onClick={() => store.toggleMuted()}
               aria-label={snap.muted ? "효과음 켜기" : "효과음 끄기"}
               aria-pressed={snap.muted}
@@ -344,6 +362,22 @@ export default function PlayView({ snap, onOpenTrack }: Props) {
           </div>
         </div>
       </div>
+
+      {/* 업적 달성 토스트 */}
+      {achNotice && (
+        <div
+          role="status"
+          className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-amber-300/95 px-4 py-2 text-black shadow-lg"
+        >
+          <span aria-hidden>{achNotice.icon}</span>
+          <span className="text-xs font-bold whitespace-nowrap">
+            업적 달성 — {achNotice.name}
+          </span>
+        </div>
+      )}
+
+      {/* 도감·업적 */}
+      {codexOpen && <CodexModal snap={snap} onClose={() => setCodexOpen(false)} />}
 
       {/* 회피 훈련 미니게임 */}
       {training && <MiniGame onClose={() => setTraining(false)} />}
