@@ -15,6 +15,8 @@ import feature9 from "./feature-9/config";
 import feature10 from "./feature-10/config";
 import feature11 from "./feature-11/config";
 import feature12 from "./feature-12/config";
+// 13 (줍스 딥오비트): 조율자 승인 하에 추가된 메뉴 — three.js 3D 아케이드
+import feature13 from "./feature-13/config";
 
 export type { FeatureConfig };
 
@@ -32,4 +34,5 @@ export const features: FeatureConfig[] = [
   feature10,
   feature11,
   feature12,
+  feature13,
 ];
